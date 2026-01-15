@@ -1,0 +1,16 @@
+{
+  "dependencies": [
+    "langchain",
+    "langgraph",
+    "langchain-groq",
+    "crawl4ai",
+    "python-dotenv"
+  ],
+  "nodes": {
+    "llm_call": "my_agent.nodes:llm_call",
+    "tool_node": "my_agent.nodes:tool_node"
+  },
+  "graphs": {
+    "agent": "my_agent.agent:graph"
+  }
+}
