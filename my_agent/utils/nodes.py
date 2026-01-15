@@ -1,4 +1,3 @@
-import os
 import logging
 from typing import Literal
 from langchain_core.rate_limiters import InMemoryRateLimiter
@@ -6,24 +5,55 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, ToolMessage
 from my_agent.utils.state import AgentState
 from my_agent.utils.tools import AgentTools
+from my_agent.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class AgentNodes:
-    def __init__(self, model_name: str = "llama-3.3-70b-versatile"):
-        self.logger = logging.getLogger(__name__)
-        logging.basicConfig(level=logging.INFO)
-        self.tools_instance = AgentTools()
-        self.tools = self.tools_instance.get_tools()
-        self.tools_by_name = {tool.name: tool for tool in self.tools}
+    """Nodes for the LangGraph agent workflow."""
+    
+    def __init__(self, model_name: str = None):
+        """
+        Initialize agent nodes with LLM and tools.
+        
+        Args:
+            model_name: Optional model name override, defaults to config
+        """
+        self.logger = logger
+        logger.info("Initializing AgentNodes")
+        
+        # Initialize tools
+        try:
+            self.tools_instance = AgentTools()
+            self.tools = self.tools_instance.get_tools()
+            self.tools_by_name = {tool.name: tool for tool in self.tools}
+            logger.info(f"Initialized {len(self.tools)} tools: {list(self.tools_by_name.keys())}")
+        except Exception as e:
+            logger.exception("Failed to initialize tools")
+            raise
 
-        rate_limiter = InMemoryRateLimiter(requests_per_second=0.1, max_bucket_size=10)
-        self.llm = init_chat_model(
-            model=model_name,
-            model_provider="groq",
-            temperature=0,
-            api_key=os.getenv("GROQ_API_KEY"),
-            rate_limiter=rate_limiter,
-        ).bind_tools(self.tools)
+        # Initialize LLM with rate limiting
+        try:
+            model_name = model_name or settings.llm_model_name
+            rate_limiter = InMemoryRateLimiter(
+                requests_per_second=settings.llm_rate_limit_rps,
+                max_bucket_size=settings.llm_rate_limit_bucket_size
+            )
+            
+            self.llm = init_chat_model(
+                model=model_name,
+                model_provider="groq",
+                temperature=settings.llm_temperature,
+                api_key=settings.groq_api_key,
+                rate_limiter=rate_limiter,
+            ).bind_tools(self.tools)
+            
+            logger.info(f"Initialized LLM: {model_name} with rate limit {settings.llm_rate_limit_rps} RPS")
+        except Exception as e:
+            logger.exception("Failed to initialize LLM")
+            raise
 
     async def llm_call(self, state: AgentState):
         """
@@ -47,6 +77,12 @@ class AgentNodes:
     async def tool_node(self, state: AgentState):
         """
         Executes the tool calls requested by the LLM.
+        
+        Args:
+            state: The current agent state
+            
+        Returns:
+            Updated state with tool execution results
         """
         last_message = state["messages"][-1]
         results = []
@@ -54,13 +90,24 @@ class AgentNodes:
         for tool_call in last_message.tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
-            tool_func = self.tools_by_name[tool_name]
+            
+            logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
 
-            self.logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
-
-            # Since our tools are methods, we need to handle them correctly
-            # langchain_core.tools.tool decorator handles self if applied to a method
-            observation = await tool_func.ainvoke(tool_args)
+            try:
+                tool_func = self.tools_by_name.get(tool_name)
+                
+                if not tool_func:
+                    error_msg = f"Tool '{tool_name}' not found in available tools"
+                    logger.error(error_msg)
+                    observation = f"❌ Error: {error_msg}"
+                else:
+                    # langchain_core.tools.tool decorator handles self if applied to a method
+                    observation = await tool_func.ainvoke(tool_args)
+                    logger.info(f"Tool {tool_name} completed successfully")
+                    
+            except Exception as e:
+                logger.exception(f"Error executing tool {tool_name}")
+                observation = f"❌ Error executing {tool_name}: {str(e)}"
 
             results.append(
                 ToolMessage(content=str(observation), tool_call_id=tool_call["id"])
