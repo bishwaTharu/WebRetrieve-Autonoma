@@ -1,38 +1,71 @@
+import logging
 from langchain_core.tools import tool
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SKLearnVectorStore
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from my_agent.config import settings
+
+
+logger = logging.getLogger(__name__)
 
 
 class AgentTools:
+    """Tools for web crawling and RAG retrieval."""
+
     def __init__(self):
-        self.vector_store = SKLearnVectorStore(
-            embedding=HuggingFaceEmbeddings(
-                model_name="sentence-transformers/all-MiniLM-L6-v2",
-                model_kwargs={"device": "cpu"},
+        """Initialize tools with configuration from settings."""
+        logger.info("Initializing AgentTools with configuration")
+
+        try:
+            self.vector_store = SKLearnVectorStore(
+                embedding=HuggingFaceEmbeddings(
+                    model_name=settings.embedding_model_name,
+                    model_kwargs={"device": settings.embedding_device},
+                )
             )
-        )
+            logger.info(
+                f"Initialized vector store with embedding model: {settings.embedding_model_name}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize vector store: {e}")
+            raise
+
         self.crawler_config = CrawlerRunConfig(cache_mode=CacheMode.ENABLED)
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=4000,
-            chunk_overlap=200,
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
             separators=["\n\n", "\n", " ", ""],
+        )
+        logger.info(
+            f"Initialized text splitter with chunk_size={settings.chunk_size}, chunk_overlap={settings.chunk_overlap}"
         )
 
     async def _web_crawler_logic(self, url: str) -> str:
         """
         Logic for crawling the given website URL and extracting content.
+
+        Args:
+            url: The URL to crawl
+
+        Returns:
+            A summary of the crawl operation including indexed content and links
         """
+        logger.info(f"Starting web crawl for URL: {url}")
+
         try:
             async with AsyncWebCrawler() as crawler:
                 result = await crawler.arun(url=url, config=self.crawler_config)
 
                 if not result or not result.success:
-                    return f"Failed to crawl {url}. Error: {getattr(result, 'error_message', 'Unknown error')}"
+                    error_msg = getattr(result, "error_message", "Unknown error")
+                    logger.error(f"Failed to crawl {url}: {error_msg}")
+                    return f"Failed to crawl {url}. Error: {error_msg}"
 
                 texts = self.text_splitter.split_text(result.markdown)
+                logger.info(f"Split content into {len(texts)} chunks for {url}")
+
                 docs = [
                     Document(
                         page_content=text,
@@ -46,38 +79,61 @@ class AgentTools:
                     )
                     for i, text in enumerate(texts)
                 ]
+
                 self.vector_store.add_documents(docs)
+                logger.info(f"Successfully indexed {len(docs)} chunks from {url}")
+
                 links = result.links.get("internal", [])
                 links_summary = "\n".join(
-                    [f"- {l.get('text')}: {l.get('href')}" for l in links[:15]]
+                    [
+                        f"- {l.get('text', 'No text')}: {l.get('href', 'No href')}"
+                        for l in links[:15]
+                    ]
                 )
 
                 return (
-                    f"Successfully crawled and indexed {url}.\n"
+                    f"✓ Successfully crawled and indexed {url}.\n"
+                    f"📄 Indexed {len(docs)} content chunks.\n"
                     f"Content snippet: {result.markdown[:300]}...\n\n"
-                    f"Found internal links (useful for deeper research):\n{links_summary}"
+                    f"🔗 Found {len(links)} internal links (showing top 15 for deeper research):\n{links_summary if links_summary else 'No internal links found'}"
                 )
         except Exception as e:
-            return f"Error crawling {url}: {str(e)}"
+            logger.exception(f"Error crawling {url}")
+            return f"❌ Error crawling {url}: {str(e)}"
 
     def _rag_retrieval_logic(self, query: str) -> str:
         """
         Logic for searching the internal knowledge base.
+
+        Args:
+            query: The search query
+
+        Returns:
+            Retrieved context from the knowledge base
         """
+        logger.info(f"Performing RAG retrieval for query: {query[:100]}...")
+
         try:
-            docs = self.vector_store.similarity_search(query, k=5)
+            docs = self.vector_store.similarity_search(query, k=settings.rag_top_k)
+
             if not docs:
-                return "No relevant information found in the knowledge base. Try crawling more URLs."
+                logger.warning("No relevant documents found in vector store")
+                return "⚠️ No relevant information found in the knowledge base. Try crawling more URLs first."
+
+            logger.info(f"Retrieved {len(docs)} relevant documents")
 
             content = "\n\n".join(
                 [
-                    f"Source: {d.metadata.get('source')}\nContent: {d.page_content}"
+                    f"📄 Source: {d.metadata.get('source', 'Unknown')}\n"
+                    f"Title: {d.metadata.get('title', 'No Title')}\n"
+                    f"Content: {d.page_content}"
                     for d in docs
                 ]
             )
-            return f"Retrieved Context:\n{content}"
+            return f"✓ Retrieved {len(docs)} relevant contexts:\n\n{content}"
         except Exception as e:
-            return f"Error during retrieval: {str(e)}"
+            logger.exception("Error during RAG retrieval")
+            return f"❌ Error during retrieval: {str(e)}"
 
     def get_tools(self):
         @tool
