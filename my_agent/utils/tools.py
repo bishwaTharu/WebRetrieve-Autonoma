@@ -6,6 +6,7 @@ from langchain_community.vectorstores import SKLearnVectorStore
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from my_agent.config import settings
+import urllib.parse
 
 
 logger = logging.getLogger(__name__)
@@ -135,7 +136,75 @@ class AgentTools:
             logger.exception("Error during RAG retrieval")
             return f"❌ Error during retrieval: {str(e)}"
 
+    async def _google_search_logic(self, query: str) -> str:
+        """
+        Logic for performing a Google search using crawl4ai.
+
+        Args:
+            query: The search query
+
+        Returns:
+            A list of relevant links found in the search results
+        """
+        logger.info(f"Performing Google search for: {query}")
+        encoded_query = urllib.parse.quote(query)
+        url = f"https://www.google.com/search?q={encoded_query}"
+
+        try:
+            async with AsyncWebCrawler() as crawler:
+                result = await crawler.arun(url=url, config=self.crawler_config)
+
+                if not result or not result.success:
+                    error_msg = getattr(result, "error_message", "Unknown error")
+                    logger.error(f"Failed to search Google: {error_msg}")
+                    return f"Failed to search Google. Error: {error_msg}"
+
+                links = []
+                if result.links:
+                    all_links = result.links.get("external", [])
+                    
+                    for link in all_links:
+                        href = link.get("href", "")
+                        text = link.get("text", "")
+                        
+                        if (
+                            href 
+                            and href.startswith("http") 
+                            and "google.com" not in href 
+                            and "googleusercontent" not in href
+                        ):
+                            links.append(f"- {text}: {href}")
+
+                unique_links = []
+                seen_urls = set()
+                for l in links:
+                    url_part = l.split(": ")[-1]
+                    if url_part not in seen_urls:
+                        unique_links.append(l)
+                        seen_urls.add(url_part)
+                        if len(unique_links) >= 10:
+                            break
+
+                formatted_links = "\n".join(unique_links)
+                return (
+                    f"✓ Google Search Results for '{query}':\n"
+                    f"{formatted_links}\n\n"
+                    "SUGGESTION: Use 'web_crawler_tool' to crawl the most relevant URLs from the list above."
+                )
+
+        except Exception as e:
+            logger.exception(f"Error searching Google for {query}")
+            return f"❌ Error searching Google: {str(e)}"
+
     def get_tools(self):
+        @tool
+        async def google_search_tool(query: str) -> str:
+            """
+            Performs a Google search to find relevant websites and URLs.
+            Use this when you need to find information but don't have a specific URL to crawl.
+            """
+            return await self._google_search_logic(query)
+
         @tool
         async def web_crawler_tool(url: str) -> str:
             """
@@ -152,4 +221,4 @@ class AgentTools:
             """
             return self._rag_retrieval_logic(query)
 
-        return [web_crawler_tool, rag_retrieval_tool]
+        return [google_search_tool, web_crawler_tool, rag_retrieval_tool]
