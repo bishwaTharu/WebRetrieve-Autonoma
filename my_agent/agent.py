@@ -1,3 +1,4 @@
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, START, END
 from my_agent.utils.state import AgentState
 from my_agent.utils.nodes import AgentNodes
@@ -8,6 +9,7 @@ class AgentWorkflow:
         self.nodes = AgentNodes()
         self.workflow = StateGraph(AgentState)
         self._build_graph()
+        self.checkpointer = MemorySaver()
 
     def _build_graph(self):
         self.workflow.add_node("llm_call", self.nodes.llm_call)
@@ -24,7 +26,7 @@ class AgentWorkflow:
         self.workflow.add_edge("tool_node", "llm_call")
 
     def compile(self):
-        return self.workflow.compile()
+        return self.workflow.compile(checkpointer=self.checkpointer)
 
 
 agent_instance = AgentWorkflow()

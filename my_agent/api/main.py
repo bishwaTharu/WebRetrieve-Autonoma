@@ -69,6 +69,23 @@ async def health_check():
     return HealthResponse(status="healthy", version=settings.api_version)
 
 
+@app.get("/models", tags=["Configuration"])
+async def get_models():
+    """
+    Get list of supported Groq models for tool usage.
+    """
+    return {
+        "models": [
+            {"id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B Versatile", "provider": "Groq"},
+            {"id": "llama-3.1-8b-instant", "name": "Llama 3.1 8B Instant", "provider": "Groq"},
+            {"id": "llama3-70b-8192", "name": "Llama 3 70B (Base)", "provider": "Groq"},
+            {"id": "llama3-8b-8192", "name": "Llama 3 8B (Base)", "provider": "Groq"},
+            {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B", "provider": "Groq"},
+            {"id": "gemma2-9b-it", "name": "Gemma 2 9B IT", "provider": "Groq"},
+        ]
+    }
+
+
 @app.post("/query", response_model=QueryResponse, tags=["Agent"])
 async def query_agent(request: QueryRequest):
     """
@@ -93,9 +110,14 @@ async def query_agent(request: QueryRequest):
 
     try:
         inputs = {"messages": [HumanMessage(content=request.query)]}
+        config = {"configurable": {"thread_id": request.thread_id}}
+        
+        if request.model:
+            config["configurable"]["model"] = request.model
+            logger.info(f"Using requested model: {request.model}")
 
         all_messages = []
-        async for output in graph.astream(inputs, stream_mode="updates"):
+        async for output in graph.astream(inputs, config=config, stream_mode="updates"):
             for node_name, state_update in output.items():
                 logger.info(f"Node {node_name} executed")
                 if "messages" in state_update:
@@ -170,7 +192,6 @@ async def submit_links(request: LinkSubmissionRequest):
 
             total_urls = len(request.urls)
             for idx, url in enumerate(request.urls, 1):
-                # Send progress event
                 progress = int((idx - 1) / total_urls * 100)
                 progress_data = json.dumps(
                     {
@@ -235,13 +256,10 @@ async def submit_links(request: LinkSubmissionRequest):
                             Format: ["Question 1?", "Question 2?", "Question 3?", "Question 4?"]
                             """
 
-                # Get questions from LLM
                 response = await llm.ainvoke(prompt)
                 questions_text = response.content.strip()
 
-                # Parse JSON response with robust extraction
                 try:
-                    # Remove thinking tags if present
                     questions_text = re.sub(
                         r"<tool_call>.*?<tool_call>",
                         "",
@@ -262,7 +280,6 @@ async def submit_links(request: LinkSubmissionRequest):
                     if json_match:
                         questions_text = json_match.group(0)
 
-                    # Clean up the text
                     questions_text = questions_text.strip()
                     questions = json.loads(questions_text)
                     if isinstance(questions, list) and len(questions) > 0:
@@ -354,7 +371,6 @@ async def stream_query(request: StreamingQueryRequest):
         try:
             import json
 
-            # Send initial status
             progress_data = json.dumps(
                 {
                     "event_type": "status",
@@ -365,13 +381,17 @@ async def stream_query(request: StreamingQueryRequest):
             yield f"event: progress\ndata: {progress_data}\n\n"
 
             inputs = {"messages": [HumanMessage(content=request.query)]}
+            config = {"configurable": {"thread_id": request.thread_id}}
+            
+            if request.model:
+                 config["configurable"]["model"] = request.model
+
             progress = 20
 
-            async for output in graph.astream(inputs, stream_mode="updates"):
+            async for output in graph.astream(inputs, config=config, stream_mode="updates"):
                 for node_name, state_update in output.items():
                     logger.info(f"Node {node_name} executed")
 
-                    # Send node execution event
                     if node_name == "tool_node":
                         node_progress = json.dumps(
                             {

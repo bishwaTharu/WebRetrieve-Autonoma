@@ -14,6 +14,14 @@ class QueryRequest(BaseModel):
         max_length=5000,
         examples=["Tell me about crawl4ai features from crawl4ai.com"]
     )
+    thread_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique thread ID for conversation persistence"
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="ID of the model to use for this request"
+    )
     
     class Config:
         json_schema_extra = {
@@ -60,9 +68,17 @@ class StreamingQueryRequest(BaseModel):
         min_length=1,
         max_length=5000
     )
+    thread_id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()),
+        description="Unique thread ID for conversation persistence"
+    )
     session_id: Optional[str] = Field(
         default=None,
         description="Optional session ID for context"
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="ID of the model to use for this request"
     )
 
 

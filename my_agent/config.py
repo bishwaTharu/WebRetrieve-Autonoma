@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     groq_api_key: str = Field(..., validation_alias="GROQ_API_KEY")
     
     llm_model_name: str = Field(
-        default="qwen/qwen3-32b",
+        default="llama-3.3-70b-versatile",
         validation_alias="LLM_MODEL_NAME"
     )
     llm_temperature: float = Field(default=0.0, validation_alias="LLM_TEMPERATURE")
@@ -42,17 +42,19 @@ class Settings(BaseSettings):
     api_host: str = Field(default="0.0.0.0", validation_alias="API_HOST")
     api_port: int = Field(default=8000, validation_alias="API_PORT")
     api_title: str = Field(
-        default="Agentic RAG API",
+        default="WebRetrieve Autonoma API",
         validation_alias="API_TITLE"
     )
     api_version: str = Field(default="0.1.0", validation_alias="API_VERSION")
     
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
+    github_token: Optional[str] = Field(default=None, validation_alias="GITHUB_TOKEN")
     
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
         case_sensitive = False
+        extra = "ignore" 
 
 
 settings = Settings()
