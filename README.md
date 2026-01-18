@@ -14,7 +14,8 @@ Production-level API for an Agentic RAG (Retrieval-Augmented Generation) system 
 ## Architecture
 
 ```
-my_agent/
+```
+WebRetrieve_Autonoma/
 ├── api/                    # FastAPI application
 │   ├── main.py            # API endpoints and app setup
 │   ├── models.py          # Pydantic request/response models
@@ -33,7 +34,11 @@ my_agent/
 
 ```bash
 # Install dependencies using uv (recommended)
-uv sync
+uv sync # Install required browser dependencies
+uv run crawl4ai-setup
+
+# Verify the installation and system compatibility
+uv run crawl4ai-doctor
 
 # Or using pip
 pip install -e .
@@ -63,11 +68,11 @@ LOG_LEVEL=INFO
 ### Running the API
 
 ```bash
-# Using Python module
-python -m my_agent.api.main
+# Using Python module with uv
+uv run python -m WebRetrieve_Autonoma.api.main
 
-# Or using Uvicorn directly
-uvicorn my_agent.api.main:app --reload --host 0.0.0.0 --port 8000
+# Or using Uvicorn directly with uv
+uv run uvicorn WebRetrieve_Autonoma.api.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 The API will be available at:
@@ -146,10 +151,10 @@ Run the test suite:
 
 ```bash
 # Make sure the API server is running first
-python -m my_agent.api.main
+uv run python -m WebRetrieve_Autonoma.api.main
 
 # In another terminal, run tests
-python tests/test_api.py
+uv run python tests/test_api.py
 ```
 
 ## How It Works
@@ -183,7 +188,7 @@ All settings can be configured via environment variables or `.env` file:
 
 For production deployment:
 
-1. Set appropriate CORS origins in `my_agent/api/main.py`
+1. Set appropriate CORS origins in `WebRetrieve_Autonoma/api/main.py`
 2. Use a production ASGI server like Gunicorn with Uvicorn workers
 3. Set up proper logging and monitoring
 4. Configure rate limiting and authentication as needed
@@ -191,7 +196,7 @@ For production deployment:
 
 Example production command:
 ```bash
-gunicorn my_agent.api.main:app \
+gunicorn WebRetrieve_Autonoma.api.main:app \
   --workers 4 \
   --worker-class uvicorn.workers.UvicornWorker \
   --bind 0.0.0.0:8000 \
