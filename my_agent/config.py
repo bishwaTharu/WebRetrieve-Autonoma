@@ -9,18 +9,19 @@ class Settings(BaseSettings):
     
     groq_api_key: str = Field(..., validation_alias="GROQ_API_KEY")
     
+    llm_provider: str = Field(default="groq", validation_alias="LLM_PROVIDER")
     llm_model_name: str = Field(
-        default="llama-3.3-70b-versatile",
+        default="llama-3.1-8b-instant", # Use lighter model to avoid TPM limits
         validation_alias="LLM_MODEL_NAME"
     )
     llm_temperature: float = Field(default=0.0, validation_alias="LLM_TEMPERATURE")
     llm_rate_limit_rps: float = Field(
-        default=0.1,
+        default=0.05, # Extremely conservative: 1 req / 20s to ensure stability
         validation_alias="LLM_RATE_LIMIT_RPS",
         description="Requests per second for LLM rate limiting"
     )
     llm_rate_limit_bucket_size: int = Field(
-        default=10,
+        default=1, # Reduce burst to 1 to strictly enforce RPS and avoid 429s
         validation_alias="LLM_RATE_LIMIT_BUCKET_SIZE"
     )
     

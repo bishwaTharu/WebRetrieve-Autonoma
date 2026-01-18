@@ -20,6 +20,9 @@ dependencies = [
     "typing-extensions>=4.15.0",
     "uvicorn>=0.32.0",
     "langchain-core>=1.2.7",
+    "rank-bm25>=0.2.2",
+    "langchain-classic>=1.0.1",
+    "langchain-ollama>=0.2.0",
 ]
 
 [build-system]
