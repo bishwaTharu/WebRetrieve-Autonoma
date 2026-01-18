@@ -1,7 +1,7 @@
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import StateGraph, START, END
-from my_agent.utils.state import AgentState
-from my_agent.utils.nodes import AgentNodes
+from WebRetrieve_Autonoma.utils.state import AgentState
+from WebRetrieve_Autonoma.utils.nodes import AgentNodes
 
 
 class AgentWorkflow:
@@ -26,7 +26,6 @@ class AgentWorkflow:
         self.workflow.add_edge("tool_node", "llm_call")
 
     def compile(self):
-        # MLE ROBUSTNESS: Set recursion limit to prevent infinite loops (standard for ReAct)
         return self.workflow.compile(
             checkpointer=self.checkpointer
         )

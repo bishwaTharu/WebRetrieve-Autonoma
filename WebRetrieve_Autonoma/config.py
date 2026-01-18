@@ -11,17 +11,17 @@ class Settings(BaseSettings):
     
     llm_provider: str = Field(default="groq", validation_alias="LLM_PROVIDER")
     llm_model_name: str = Field(
-        default="llama-3.1-8b-instant", # Use lighter model to avoid TPM limits
+        default="llama-3.1-8b-instant", 
         validation_alias="LLM_MODEL_NAME"
     )
     llm_temperature: float = Field(default=0.0, validation_alias="LLM_TEMPERATURE")
     llm_rate_limit_rps: float = Field(
-        default=0.05, # Extremely conservative: 1 req / 20s to ensure stability
+        default=2.0, 
         validation_alias="LLM_RATE_LIMIT_RPS",
         description="Requests per second for LLM rate limiting"
     )
     llm_rate_limit_bucket_size: int = Field(
-        default=1, # Reduce burst to 1 to strictly enforce RPS and avoid 429s
+        default=10, # Allow bursting up to 10 requests
         validation_alias="LLM_RATE_LIMIT_BUCKET_SIZE"
     )
     
