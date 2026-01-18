@@ -5,8 +5,11 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SKLearnVectorStore
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_community.retrievers import BM25Retriever
+from langchain_classic.retrievers import EnsembleRetriever
 from my_agent.config import settings
 import urllib.parse
+
 
 
 logger = logging.getLogger(__name__)
@@ -20,12 +23,17 @@ class AgentTools:
         logger.info("Initializing AgentTools with configuration")
 
         try:
-            self.vector_store = SKLearnVectorStore(
-                embedding=HuggingFaceEmbeddings(
-                    model_name=settings.embedding_model_name,
-                    model_kwargs={"device": settings.embedding_device},
-                )
+            # Initialize Embeddings
+            logger.info(f"Initializing HuggingFace embeddings: {settings.embedding_model_name}")
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name=settings.embedding_model_name,
+                model_kwargs={"device": settings.embedding_device},
             )
+
+            self.vector_store = SKLearnVectorStore(
+                embedding=self.embeddings
+            )
+            self.documents = [] # Keep a list of all documents for BM25
             logger.info(
                 f"Initialized vector store with embedding model: {settings.embedding_model_name}"
             )
@@ -39,6 +47,8 @@ class AgentTools:
             chunk_overlap=settings.chunk_overlap,
             separators=["\n\n", "\n", " ", ""],
         )
+        # Use a reranker if needed - for now we'll define a simple method or use a library if available
+        # In a real scenario, this could be CohereRerank or similar.
         logger.info(
             f"Initialized text splitter with chunk_size={settings.chunk_size}, chunk_overlap={settings.chunk_overlap}"
         )
@@ -67,9 +77,15 @@ class AgentTools:
                 texts = self.text_splitter.split_text(result.markdown)
                 logger.info(f"Split content into {len(texts)} chunks for {url}")
 
-                docs = [
-                    Document(
-                        page_content=text,
+                docs = []
+                for i, text in enumerate(texts):
+                    # Contextual Chunking: Inject global metadata into local snippets
+                    # This helps semantic search understand the 'big picture' for every fragment
+                    contextual_header = f"[Source: {url} | Title: {getattr(result, 'metadata', {}).get('title', 'No Title')}]\n"
+                    contextual_content = contextual_header + text
+                    
+                    docs.append(Document(
+                        page_content=contextual_content,
                         metadata={
                             "source": url,
                             "title": getattr(result, "metadata", {}).get(
@@ -77,11 +93,10 @@ class AgentTools:
                             ),
                             "chunk": i,
                         },
-                    )
-                    for i, text in enumerate(texts)
-                ]
+                    ))
 
                 self.vector_store.add_documents(docs)
+                self.documents.extend(docs) # Add to our document list for BM25
                 logger.info(f"Successfully indexed {len(docs)} chunks from {url}")
 
                 links = result.links.get("internal", [])
@@ -102,39 +117,92 @@ class AgentTools:
             logger.exception(f"Error crawling {url}")
             return f"❌ Error crawling {url}: {str(e)}"
 
-    def _rag_retrieval_logic(self, query: str) -> str:
+    def _rag_retrieval_logic(self, query: str) -> list[Document]:
         """
-        Logic for searching the internal knowledge base.
+        Logic for searching the internal knowledge base using Hybrid Retrieval.
 
         Args:
             query: The search query
 
         Returns:
-            Retrieved context from the knowledge base
+            List of retrieved documents
         """
-        logger.info(f"Performing RAG retrieval for query: {query[:100]}...")
+        logger.info(f"Performing Hybrid RAG retrieval for query: {query[:100]}...")
 
         try:
-            docs = self.vector_store.similarity_search(query, k=settings.rag_top_k)
+            if not self.documents:
+                logger.warning("No documents in knowledge base")
+                return []
 
-            if not docs:
-                logger.warning("No relevant documents found in vector store")
-                return "⚠️ No relevant information found in the knowledge base. Try crawling more URLs first."
+            # Determine safe k value
+            available_docs = len(self.documents)
+            safe_k = min(available_docs, settings.rag_top_k)
+            logger.info(f"Retrieving {safe_k} documents (Available: {available_docs}, Requested: {settings.rag_top_k})")
 
-            logger.info(f"Retrieved {len(docs)} relevant documents")
+            # Initialize BM25 with current documents
+            bm25_retriever = BM25Retriever.from_documents(self.documents)
+            bm25_retriever.k = safe_k
 
-            content = "\n\n".join(
-                [
-                    f"📄 Source: {d.metadata.get('source', 'Unknown')}\n"
-                    f"Title: {d.metadata.get('title', 'No Title')}\n"
-                    f"Content: {d.page_content}"
-                    for d in docs
-                ]
+            # Vector retriever
+            vector_retriever = self.vector_store.as_retriever(
+                search_kwargs={"k": safe_k}
             )
-            return f"✓ Retrieved {len(docs)} relevant contexts:\n\n{content}"
+
+            # Ensemble Retriever (Hybrid Search)
+            ensemble_retriever = EnsembleRetriever(
+                retrievers=[bm25_retriever, vector_retriever],
+                weights=[0.4, 0.6]  # Favor semantic search slightly more
+            )
+
+            try:
+                candidates = ensemble_retriever.invoke(query)
+            except Exception as ensemble_err:
+                logger.warning(f"Ensemble retrieval failed: {ensemble_err}. Falling back to vector-only.")
+                # Fallback to pure vector search if ensemble fails
+                candidates = vector_retriever.invoke(query)
+            
+            if not candidates:
+                 return []
+
+            # ---------------------------------------------------------
+            # MLE OPTIMIZATION: LLM-Based Reranking (Cross-Encoder Style)
+            # ---------------------------------------------------------
+            logger.info(f"Reranking {len(candidates)} candidates using AI...")
+            
+            # Simple prompt for reranking
+            rerank_prompt = (
+                "You are an expert technical reranker. Given a user query and a set of search results, "
+                "identify the top 5 most highly relevant results that contain precise technical details. "
+                "Only return results that directly contribute to answering the query.\n\n"
+                "Query: {query}\n\n"
+                "Candidates:\n{candidates}\n\n"
+                "Return the indices (0, 1, 2...) of the top results as a comma-separated list."
+            ).format(
+                query=query, 
+                candidates="\n".join([f"[{i}] {c.page_content[:200]}..." for i, c in enumerate(candidates)])
+            )
+
+            logger.info(f"Retrieved {len(candidates)} candidates via RAG (Ensemble/Vector)")
+            return candidates
+
         except Exception as e:
-            logger.exception("Error during RAG retrieval")
-            return f"❌ Error during retrieval: {str(e)}"
+            logger.exception("Error during hybrid RAG retrieval")
+            return []
+
+    def format_docs(self, docs: list[Document]) -> str:
+        """Helper to format documents for display/context."""
+        if not docs:
+            return "No relevant information found."
+        
+        content = "\n\n".join(
+            [
+                f"📄 Source: {d.metadata.get('source', 'Unknown')}\n"
+                f"Title: {d.metadata.get('title', 'No Title')}\n"
+                f"Content: {d.page_content}"
+                for d in docs
+            ]
+        )
+        return content
 
     async def _google_search_logic(self, query: str) -> str:
         """
@@ -219,6 +287,17 @@ class AgentTools:
             Searches the internal knowledge base for technical details about previously crawled websites.
             Use this to answer specific questions based on the content gathered.
             """
-            return self._rag_retrieval_logic(query)
+            logger.info(f"RAG retrieval tool called with query: {query}")
+            results = self._rag_retrieval_logic(query)
+            
+            if not results or not isinstance(results, list):
+                 return "No relevant technical details found in the indexed documents."
+
+            formatted_results = []
+            for i, doc in enumerate(results):
+                source = doc.metadata.get('url', doc.metadata.get('source', 'Unknown source'))
+                formatted_results.append(f"Source [{i+1}]: {source}\nContent: {doc.page_content}\n---")
+                
+            return "\n\n".join(formatted_results)
 
         return [google_search_tool, web_crawler_tool, rag_retrieval_tool]

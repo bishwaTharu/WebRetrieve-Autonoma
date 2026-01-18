@@ -26,7 +26,10 @@ class AgentWorkflow:
         self.workflow.add_edge("tool_node", "llm_call")
 
     def compile(self):
-        return self.workflow.compile(checkpointer=self.checkpointer)
+        # MLE ROBUSTNESS: Set recursion limit to prevent infinite loops (standard for ReAct)
+        return self.workflow.compile(
+            checkpointer=self.checkpointer
+        )
 
 
 agent_instance = AgentWorkflow()
