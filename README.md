@@ -11,28 +11,8 @@ Production-level API for an Agentic RAG (Retrieval-Augmented Generation) system 
 - 🛡️ **Robust Error Handling**: Comprehensive error handling and logging throughout
 - ⚙️ **Configuration Management**: Pydantic-based settings with environment variable support
 
-## Architecture
-
-```
-```
-WebRetrieve_Autonoma/
-├── api/                    # FastAPI application
-│   ├── main.py            # API endpoints and app setup
-│   ├── models.py          # Pydantic request/response models
-│   └── __init__.py
-├── utils/                 # Core utilities
-│   ├── nodes.py          # LangGraph nodes
-│   ├── tools.py          # Agent tools (crawler, RAG)
-│   └── state.py          # Agent state definition
-├── agent.py              # LangGraph workflow definition
-└── config.py             # Configuration management
-```
-
-## Quick Start
-
-### Installation
-
 ```bash
+
 # Install dependencies using uv (recommended)
 uv sync # Install required browser dependencies
 uv run crawl4ai-setup
@@ -184,36 +164,4 @@ All settings can be configured via environment variables or `.env` file:
 | `API_PORT` | `8000` | API server port |
 | `LOG_LEVEL` | `INFO` | Logging level |
 
-## Production Deployment
 
-For production deployment:
-
-1. Set appropriate CORS origins in `WebRetrieve_Autonoma/api/main.py`
-2. Use a production ASGI server like Gunicorn with Uvicorn workers
-3. Set up proper logging and monitoring
-4. Configure rate limiting and authentication as needed
-5. Use environment variables for sensitive configuration
-
-Example production command:
-```bash
-gunicorn WebRetrieve_Autonoma.api.main:app \
-  --workers 4 \
-  --worker-class uvicorn.workers.UvicornWorker \
-  --bind 0.0.0.0:8000 \
-  --log-level info
-```
-
-## Development
-
-The codebase follows production-level best practices:
-
-- **Type Hints**: Comprehensive type annotations throughout
-- **Error Handling**: Try-except blocks with proper logging
-- **Configuration**: Centralized settings management with Pydantic
-- **Logging**: Structured logging at appropriate levels
-- **Validation**: Pydantic models for request/response validation
-- **Documentation**: Docstrings and inline documentation
-
-## License
-
-MIT
