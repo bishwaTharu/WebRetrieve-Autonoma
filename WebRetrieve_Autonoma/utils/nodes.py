@@ -1,9 +1,9 @@
 import logging
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from langchain.chat_models import init_chat_model
-from my_agent.utils.state import AgentState
-from my_agent.utils.tools import AgentTools
-from my_agent.config import settings
+from WebRetrieve_Autonoma.utils.state import AgentState
+from WebRetrieve_Autonoma.utils.tools import AgentTools
+from WebRetrieve_Autonoma.config import settings
 from langchain_core.runnables import RunnableConfig
 
 
@@ -21,7 +21,7 @@ class AgentNodes:
         logger.info("Initializing AgentNodes")
         
         try:
-            from my_agent.utils.rate_limiter import AsyncTokenBucket
+            from WebRetrieve_Autonoma.utils.rate_limiter import AsyncTokenBucket
             self.rate_limiter = AsyncTokenBucket(
                 rate=settings.llm_rate_limit_rps,
                 capacity=settings.llm_rate_limit_bucket_size
@@ -72,12 +72,10 @@ class AgentNodes:
         
         selected_model_name = model_name or settings.llm_model_name
 
-        # Force Groq provider
         provider = "groq"
         logger.info(f"Resolved Provider: {provider} | Selected Model: {selected_model_name}")
 
         try:
-            # Rate Limit Check
             logger.info("Acquiring rate limit token...")
             await self.rate_limiter.acquire()
             logger.info("Token acquired. Proceeding with LLM call.")
@@ -126,7 +124,11 @@ class AgentNodes:
                     "Thought: I have crawled both pricing pages. Now I need to extract the exact numbers side-by-side.\n"
                     "Call: rag_retrieval_tool(\"Groq vs OpenAI pricing per 1M tokens\")\n"
                     "Observation: [Retrieved chunks with pricing tables]\n"
-                    "Answer: Groq charges $0.27/1M tokens for Llama 3 70B, while OpenAI... [Source: pricing-pages]\n"
+                    "Answer: Groq charges $0.27/1M tokens for Llama 3 70B, while OpenAI... [Source: pricing-pages]\n\n"
+                    "SUGGESTED QUESTIONS:\n"
+                    "At the very end of your response, strictly output a JSON block with 3-4 suggested follow-up questions. "
+                    "Format: ```json\n{\"suggested_questions\": [\"Question 1?\", \"Question 2?\"]}\n```\n"
+                    "This block must be the very last thing in your response."
                 )
             )
             
@@ -148,29 +150,35 @@ class AgentNodes:
         last_message = state["messages"][-1]
         results = []
         
+        tasks = []
         for tool_call in last_message.tool_calls:
             tool_name = tool_call["name"]
             tool_args = tool_call["args"]
-            
-            try:
-                if tool_name in self.tools_by_name:
-                    logger.info(f"Executing tool: {tool_name}")
-                    tool_instance = self.tools_by_name[tool_name]
-                    result = await tool_instance.ainvoke(tool_args)
-                    results.append(ToolMessage(
-                        content=str(result),
-                        tool_call_id=tool_call["id"]
-                    ))
+
+            if tool_name in self.tools_by_name:
+                logger.info(f"Scheduling tool: {tool_name}")
+                tool_instance = self.tools_by_name[tool_name]
+                tasks.append(tool_instance.ainvoke(tool_args))
+            else:
+                logger.warning(f"Tool {tool_name} not found")
+                async def error_coro(t_name=tool_name):
+                    return f"Error: Tool '{t_name}' not found. Available tools: {list(self.tools_by_name.keys())}"
+                tasks.append(error_coro())
+
+        if tasks:
+            import asyncio
+            execution_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for i, result in enumerate(execution_results):
+                tool_call = last_message.tool_calls[i]
+                if isinstance(result, Exception):
+                    logger.error(f"Error executing tool {tool_call['name']}: {result}")
+                    content = f"Exception during tool execution: {str(result)}"
                 else:
-                    logger.warning(f"Tool {tool_name} not found")
-                    results.append(ToolMessage(
-                        content=f"Error: Tool '{tool_name}' not found. Available tools: {list(self.tools_by_name.keys())}",
-                        tool_call_id=tool_call["id"]
-                    ))
-            except Exception as e:
-                logger.exception(f"Error executing tool {tool_name}")
+                    content = str(result)
+                
                 results.append(ToolMessage(
-                    content=f"Exception during tool execution: {str(e)}",
+                    content=content,
                     tool_call_id=tool_call["id"]
                 ))
         

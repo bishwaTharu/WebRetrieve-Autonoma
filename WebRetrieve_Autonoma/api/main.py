@@ -1,15 +1,12 @@
 import logging
-import uuid
 from contextlib import asynccontextmanager
-from typing import Dict
-from datetime import datetime
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
-from my_agent.agent import graph
-from my_agent.config import settings
-from my_agent.api.models import (
+from WebRetrieve_Autonoma.agent import graph
+from WebRetrieve_Autonoma.config import settings
+from WebRetrieve_Autonoma.api.models import (
     HealthResponse,
     StreamingQueryRequest,
 )
@@ -239,7 +236,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "my_agent.api.main:app",
+        "WebRetrieve_Autonoma.api.main:app",
         host=settings.api_host,
         port=settings.api_port,
         reload=True,

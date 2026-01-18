@@ -7,7 +7,7 @@ from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
-from my_agent.config import settings
+from WebRetrieve_Autonoma.config import settings
 import urllib.parse
 
 
@@ -23,7 +23,6 @@ class AgentTools:
         logger.info("Initializing AgentTools with configuration")
 
         try:
-            # Initialize Embeddings
             logger.info(f"Initializing HuggingFace embeddings: {settings.embedding_model_name}")
             self.embeddings = HuggingFaceEmbeddings(
                 model_name=settings.embedding_model_name,
@@ -33,7 +32,7 @@ class AgentTools:
             self.vector_store = SKLearnVectorStore(
                 embedding=self.embeddings
             )
-            self.documents = [] # Keep a list of all documents for BM25
+            self.documents = [] 
             logger.info(
                 f"Initialized vector store with embedding model: {settings.embedding_model_name}"
             )
@@ -47,8 +46,6 @@ class AgentTools:
             chunk_overlap=settings.chunk_overlap,
             separators=["\n\n", "\n", " ", ""],
         )
-        # Use a reranker if needed - for now we'll define a simple method or use a library if available
-        # In a real scenario, this could be CohereRerank or similar.
         logger.info(
             f"Initialized text splitter with chunk_size={settings.chunk_size}, chunk_overlap={settings.chunk_overlap}"
         )
@@ -79,8 +76,6 @@ class AgentTools:
 
                 docs = []
                 for i, text in enumerate(texts):
-                    # Contextual Chunking: Inject global metadata into local snippets
-                    # This helps semantic search understand the 'big picture' for every fragment
                     contextual_header = f"[Source: {url} | Title: {getattr(result, 'metadata', {}).get('title', 'No Title')}]\n"
                     contextual_content = contextual_header + text
                     
@@ -96,7 +91,7 @@ class AgentTools:
                     ))
 
                 self.vector_store.add_documents(docs)
-                self.documents.extend(docs) # Add to our document list for BM25
+                self.documents.extend(docs) 
                 logger.info(f"Successfully indexed {len(docs)} chunks from {url}")
 
                 links = result.links.get("internal", [])
@@ -134,24 +129,20 @@ class AgentTools:
                 logger.warning("No documents in knowledge base")
                 return []
 
-            # Determine safe k value
             available_docs = len(self.documents)
             safe_k = min(available_docs, settings.rag_top_k)
             logger.info(f"Retrieving {safe_k} documents (Available: {available_docs}, Requested: {settings.rag_top_k})")
 
-            # Initialize BM25 with current documents
             bm25_retriever = BM25Retriever.from_documents(self.documents)
             bm25_retriever.k = safe_k
 
-            # Vector retriever
             vector_retriever = self.vector_store.as_retriever(
                 search_kwargs={"k": safe_k}
             )
 
-            # Ensemble Retriever (Hybrid Search)
             ensemble_retriever = EnsembleRetriever(
                 retrievers=[bm25_retriever, vector_retriever],
-                weights=[0.4, 0.6]  # Favor semantic search slightly more
+                weights=[0.4, 0.6]  
             )
 
             try:
@@ -169,7 +160,6 @@ class AgentTools:
             # ---------------------------------------------------------
             logger.info(f"Reranking {len(candidates)} candidates using AI...")
             
-            # Simple prompt for reranking
             rerank_prompt = (
                 "You are an expert technical reranker. Given a user query and a set of search results, "
                 "identify the top 5 most highly relevant results that contain precise technical details. "
