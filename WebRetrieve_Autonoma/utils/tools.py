@@ -3,13 +3,12 @@ from langchain_core.tools import tool
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SKLearnVectorStore
-from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode
+from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, BrowserConfig
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
 from WebRetrieve_Autonoma.config import settings
 import urllib.parse
-
 
 
 logger = logging.getLogger(__name__)
@@ -23,16 +22,16 @@ class AgentTools:
         logger.info("Initializing AgentTools with configuration")
 
         try:
-            logger.info(f"Initializing HuggingFace embeddings: {settings.embedding_model_name}")
+            logger.info(
+                f"Initializing HuggingFace embeddings: {settings.embedding_model_name}"
+            )
             self.embeddings = HuggingFaceEmbeddings(
                 model_name=settings.embedding_model_name,
                 model_kwargs={"device": settings.embedding_device},
             )
 
-            self.vector_store = SKLearnVectorStore(
-                embedding=self.embeddings
-            )
-            self.documents = [] 
+            self.vector_store = SKLearnVectorStore(embedding=self.embeddings)
+            self.documents = []
             logger.info(
                 f"Initialized vector store with embedding model: {settings.embedding_model_name}"
             )
@@ -78,20 +77,22 @@ class AgentTools:
                 for i, text in enumerate(texts):
                     contextual_header = f"[Source: {url} | Title: {getattr(result, 'metadata', {}).get('title', 'No Title')}]\n"
                     contextual_content = contextual_header + text
-                    
-                    docs.append(Document(
-                        page_content=contextual_content,
-                        metadata={
-                            "source": url,
-                            "title": getattr(result, "metadata", {}).get(
-                                "title", "No Title"
-                            ),
-                            "chunk": i,
-                        },
-                    ))
+
+                    docs.append(
+                        Document(
+                            page_content=contextual_content,
+                            metadata={
+                                "source": url,
+                                "title": getattr(result, "metadata", {}).get(
+                                    "title", "No Title"
+                                ),
+                                "chunk": i,
+                            },
+                        )
+                    )
 
                 self.vector_store.add_documents(docs)
-                self.documents.extend(docs) 
+                self.documents.extend(docs)
                 logger.info(f"Successfully indexed {len(docs)} chunks from {url}")
 
                 links = result.links.get("internal", [])
@@ -131,7 +132,9 @@ class AgentTools:
 
             available_docs = len(self.documents)
             safe_k = min(available_docs, settings.rag_top_k)
-            logger.info(f"Retrieving {safe_k} documents (Available: {available_docs}, Requested: {settings.rag_top_k})")
+            logger.info(
+                f"Retrieving {safe_k} documents (Available: {available_docs}, Requested: {settings.rag_top_k})"
+            )
 
             bm25_retriever = BM25Retriever.from_documents(self.documents)
             bm25_retriever.k = safe_k
@@ -141,25 +144,26 @@ class AgentTools:
             )
 
             ensemble_retriever = EnsembleRetriever(
-                retrievers=[bm25_retriever, vector_retriever],
-                weights=[0.4, 0.6]  
+                retrievers=[bm25_retriever, vector_retriever], weights=[0.4, 0.6]
             )
 
             try:
                 candidates = ensemble_retriever.invoke(query)
             except Exception as ensemble_err:
-                logger.warning(f"Ensemble retrieval failed: {ensemble_err}. Falling back to vector-only.")
+                logger.warning(
+                    f"Ensemble retrieval failed: {ensemble_err}. Falling back to vector-only."
+                )
                 # Fallback to pure vector search if ensemble fails
                 candidates = vector_retriever.invoke(query)
-            
+
             if not candidates:
-                 return []
+                return []
 
             # ---------------------------------------------------------
             # MLE OPTIMIZATION: LLM-Based Reranking (Cross-Encoder Style)
             # ---------------------------------------------------------
             logger.info(f"Reranking {len(candidates)} candidates using AI...")
-            
+
             rerank_prompt = (
                 "You are an expert technical reranker. Given a user query and a set of search results, "
                 "identify the top 5 most highly relevant results that contain precise technical details. "
@@ -168,11 +172,18 @@ class AgentTools:
                 "Candidates:\n{candidates}\n\n"
                 "Return the indices (0, 1, 2...) of the top results as a comma-separated list."
             ).format(
-                query=query, 
-                candidates="\n".join([f"[{i}] {c.page_content[:200]}..." for i, c in enumerate(candidates)])
+                query=query,
+                candidates="\n".join(
+                    [
+                        f"[{i}] {c.page_content[:200]}..."
+                        for i, c in enumerate(candidates)
+                    ]
+                ),
             )
 
-            logger.info(f"Retrieved {len(candidates)} candidates via RAG (Ensemble/Vector)")
+            logger.info(
+                f"Retrieved {len(candidates)} candidates via RAG (Ensemble/Vector)"
+            )
             return candidates
 
         except Exception as e:
@@ -183,7 +194,7 @@ class AgentTools:
         """Helper to format documents for display/context."""
         if not docs:
             return "No relevant information found."
-        
+
         content = "\n\n".join(
             [
                 f"📄 Source: {d.metadata.get('source', 'Unknown')}\n"
@@ -204,12 +215,21 @@ class AgentTools:
         Returns:
             A list of relevant links found in the search results
         """
+        browser_config = BrowserConfig(
+            headless=True,
+            extra_args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",  # Prevents crashes in memory-constrained containers
+                "--disable-gpu",
+            ],
+        )
         logger.info(f"Performing Google search for: {query}")
         encoded_query = urllib.parse.quote(query)
         url = f"https://www.google.com/search?q={encoded_query}"
 
         try:
-            async with AsyncWebCrawler() as crawler:
+            async with AsyncWebCrawler(config=browser_config) as crawler:
                 result = await crawler.arun(url=url, config=self.crawler_config)
 
                 if not result or not result.success:
@@ -220,15 +240,15 @@ class AgentTools:
                 links = []
                 if result.links:
                     all_links = result.links.get("external", [])
-                    
+
                     for link in all_links:
                         href = link.get("href", "")
                         text = link.get("text", "")
-                        
+
                         if (
-                            href 
-                            and href.startswith("http") 
-                            and "google.com" not in href 
+                            href
+                            and href.startswith("http")
+                            and "google.com" not in href
                             and "googleusercontent" not in href
                         ):
                             links.append(f"- {text}: {href}")
@@ -279,15 +299,19 @@ class AgentTools:
             """
             logger.info(f"RAG retrieval tool called with query: {query}")
             results = self._rag_retrieval_logic(query)
-            
+
             if not results or not isinstance(results, list):
-                 return "No relevant technical details found in the indexed documents."
+                return "No relevant technical details found in the indexed documents."
 
             formatted_results = []
             for i, doc in enumerate(results):
-                source = doc.metadata.get('url', doc.metadata.get('source', 'Unknown source'))
-                formatted_results.append(f"Source [{i+1}]: {source}\nContent: {doc.page_content}\n---")
-                
+                source = doc.metadata.get(
+                    "url", doc.metadata.get("source", "Unknown source")
+                )
+                formatted_results.append(
+                    f"Source [{i+1}]: {source}\nContent: {doc.page_content}\n---"
+                )
+
             return "\n\n".join(formatted_results)
 
         return [google_search_tool, web_crawler_tool, rag_retrieval_tool]
