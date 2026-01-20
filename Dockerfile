@@ -13,7 +13,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-cache
 
 COPY . .
-RUN uv run crawl4ai-setup
+# RUN uv run crawl4ai-setup
 RUN uv run playwright install-deps
 RUN uv run playwright install chromium
 RUN uv run crawl4ai-doctor
