@@ -1,39 +1,18 @@
-# ===============================
-# Builder
-# ===============================
-FROM python:3.11-slim-bookworm AS builder
-
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir uv
-
-WORKDIR /app
-COPY . .
-
-# Install deps into system python
-RUN uv sync --system --frozen --no-cache
-
-# ===============================
-# Runtime
-# ===============================
 FROM unclecode/crawl4ai:latest
 
 ENV PYTHONUNBUFFERED=1
-ENV PLAYWRIGHT_BROWSERS_PATH=0  
-ENV HOME=/app                   
+ENV PLAYWRIGHT_BROWSERS_PATH=0
+ENV HOME=/app
+ENV UV_NO_VENV=1
 
 WORKDIR /app
 
-COPY --from=builder /usr/local/lib/python3.11 /usr/local/lib/python3.11
-COPY --from=builder /usr/local/bin /usr/local/bin
-COPY --from=builder /app /app
+COPY . .
 
-# 🔥 MUST RUN IN RUNTIME IMAGE
-RUN playwright install chromium
+
+RUN python -m pip install --no-cache-dir uv \
+    && python -m uv sync --frozen --no-cache \
+    && playwright install chromium
 
 EXPOSE 8000
 
