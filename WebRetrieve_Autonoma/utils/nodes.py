@@ -12,19 +12,20 @@ logger = logging.getLogger(__name__)
 
 class AgentNodes:
     """Nodes for the LangGraph agent workflow."""
-    
+
     def __init__(self, model_name: str = None):
         """
         Initialize agent nodes with LLM and tools.
         """
         self.logger = logger
         logger.info("Initializing AgentNodes")
-        
+
         try:
             from WebRetrieve_Autonoma.utils.rate_limiter import AsyncTokenBucket
+
             self.rate_limiter = AsyncTokenBucket(
                 rate=settings.llm_rate_limit_rps,
-                capacity=settings.llm_rate_limit_bucket_size
+                capacity=settings.llm_rate_limit_bucket_size,
             )
             logger.info(
                 f"Initialized Rate Limiter: {settings.llm_rate_limit_rps} RPS, "
@@ -41,66 +42,87 @@ class AgentNodes:
 
         try:
             model_name = model_name or settings.llm_model_name
-            logger.info(f"Initializing Groq LLM with model: {model_name}")
-            self.llm = init_chat_model(
-                model=model_name,
-                model_provider="groq",
-                temperature=settings.llm_temperature,
-                api_key=settings.groq_api_key,
-            )
-            
-            self.fast_llm = self.llm 
-            self.reasoning_llm = self.llm 
-            
-            logger.info(f"Initialized LLMs for nodes using provider: groq")
-        except Exception as e:
-            logger.exception(f"Failed to initialize LLM for provider groq")
-            raise
+            provider = "openai" if "gpt" in model_name.lower() else "groq"
 
-        
+            logger.info(
+                f"Initializing LLM with model: {model_name} | Provider: {provider}"
+            )
+
+            init_kwargs = {
+                "model": model_name,
+                "model_provider": provider,
+                "temperature": settings.llm_temperature,
+            }
+
+            if provider == "groq":
+                init_kwargs["api_key"] = settings.groq_api_key
+            elif provider == "openai":
+                init_kwargs["api_key"] = settings.github_api_key
+                init_kwargs["base_url"] = settings.github_base_url
+
+            self.llm = init_chat_model(**init_kwargs)
+
+            self.fast_llm = self.llm
+            self.reasoning_llm = self.llm
+
+            logger.info(f"Initialized LLMs for nodes using provider: {provider}")
+        except Exception as e:
+            logger.exception(f"Failed to initialize LLM for model {model_name}")
+            raise
 
     async def llm_call(self, state: AgentState, config: RunnableConfig):
         """Dynamic LLM call with tool binding, model switching, and TPM management."""
         logger.info("LLM Call Node: Generating response")
         messages = state["messages"]
-        
 
         model_name = None
         if config and "configurable" in config:
             model_name = config["configurable"].get("model")
             logger.info(f"Frontend requested model: {model_name}")
-        
-        selected_model_name = model_name or settings.llm_model_name
 
-        provider = "groq"
-        logger.info(f"Resolved Provider: {provider} | Selected Model: {selected_model_name}")
+        selected_model_name = model_name or settings.llm_model_name
+        provider = "openai" if "gpt" in selected_model_name.lower() else "groq"
+
+        logger.info(
+            f"Resolved Provider: {provider} | Selected Model: {selected_model_name}"
+        )
 
         try:
             logger.info("Acquiring rate limit token...")
             await self.rate_limiter.acquire()
             logger.info("Token acquired. Proceeding with LLM call.")
 
-            current_llm = init_chat_model(
-                model=selected_model_name,
-                model_provider="groq",
-                temperature=settings.llm_temperature,
-                api_key=settings.groq_api_key,
-            )
-    
+            init_kwargs = {
+                "model": selected_model_name,
+                "model_provider": provider,
+                "temperature": settings.llm_temperature,
+            }
+
+            if provider == "groq":
+                init_kwargs["api_key"] = settings.groq_api_key
+            elif provider == "openai":
+                init_kwargs["api_key"] = settings.github_api_key
+                init_kwargs["base_url"] = settings.github_base_url
+
+            current_llm = init_chat_model(**init_kwargs)
+
             processed_messages = []
             for msg in messages:
                 if isinstance(msg, ToolMessage):
-                    if len(msg.content) > 5000: # Increased limit slightly
-                        truncated_content = msg.content[:5000] + "\n... [TRUNCATED FOR TOKENS] ..."
-                        processed_messages.append(ToolMessage(content=truncated_content, tool_call_id=msg.tool_call_id))
+                    if len(msg.content) > 5000:  # Increased limit slightly
+                        truncated_content = (
+                            msg.content[:5000] + "\n... [TRUNCATED FOR TOKENS] ..."
+                        )
+                        processed_messages.append(
+                            ToolMessage(
+                                content=truncated_content, tool_call_id=msg.tool_call_id
+                            )
+                        )
                     else:
                         processed_messages.append(msg)
                 else:
                     processed_messages.append(msg)
-    
-            if len(processed_messages) > 12: # Keep more context
-                 processed_messages = [processed_messages[0], processed_messages[1]] + processed_messages[-10:]
-    
+
             sys_msg = SystemMessage(
                 content=(
                     "You are a robust WebRetrieve Autonoma. Your mission is to thoroughly research websites and provide technical answers.\n\n"
@@ -116,40 +138,46 @@ class AgentNodes:
                     "RAG OPTIMIZATION (Agentic Few-Shot):\n"
                     "User: 'What are the deployment options for LangGraph?'\n"
                     "Thought: I've already crawled the LangGraph docs, but the initial summary was truncated. I need specific deployment details.\n"
-                    "Call: rag_retrieval_tool(\"langgraph deployment options docker kubernetes\")\n"
+                    'Call: rag_retrieval_tool("langgraph deployment options docker kubernetes")\n'
                     "Observation: [Retrieved specific chunks about Docker containers and Kubernetes helm charts]\n"
                     "Thought: This gives me the specific technicals I was missing. I can now synthesize the full answer.\n"
                     "Answer: LangGraph supports deployment via Docker containers... [Source: langgraph-docs]\n\n"
                     "User: 'Compare the pricing of Groq and OpenAI.'\n"
                     "Thought: I have crawled both pricing pages. Now I need to extract the exact numbers side-by-side.\n"
-                    "Call: rag_retrieval_tool(\"Groq vs OpenAI pricing per 1M tokens\")\n"
+                    'Call: rag_retrieval_tool("Groq vs OpenAI pricing per 1M tokens")\n'
                     "Observation: [Retrieved chunks with pricing tables]\n"
                     "Answer: Groq charges $0.27/1M tokens for Llama 3 70B, while OpenAI... [Source: pricing-pages]\n\n"
                     "SUGGESTED QUESTIONS:\n"
                     "At the very end of your response, strictly output a JSON block with 3-4 suggested follow-up questions. "
-                    "Format: ```json\n{\"suggested_questions\": [\"Question 1?\", \"Question 2?\"]}\n```\n"
+                    'Format: ```json\n{"suggested_questions": ["Question 1?", "Question 2?"]}\n```\n'
                     "This block must be the very last thing in your response."
                 )
             )
-            
+
             llm_with_tools = current_llm.bind_tools(self.tools)
             response = await llm_with_tools.ainvoke([sys_msg] + processed_messages)
-            
+
             logger.info(f"LLM Response Content: {response.content[:200]}...")
             logger.info(f"LLM Response Tool Calls: {response.tool_calls}")
-            
+
             return {"messages": [response]}
-            
+
         except Exception as e:
             logger.exception(f"Error in LLM Call for model {selected_model_name}")
             # Return a fallback message so the agent doesn't just die silently
-            return {"messages": [AIMessage(content=f"An error occurred while generating the response: {str(e)}")]}
+            return {
+                "messages": [
+                    AIMessage(
+                        content=f"An error occurred while generating the response: {str(e)}"
+                    )
+                ]
+            }
 
     async def tool_node(self, state: AgentState):
         logger.info("Tool Node: Executing tools")
         last_message = state["messages"][-1]
         results = []
-        
+
         tasks = []
         for tool_call in last_message.tool_calls:
             tool_name = tool_call["name"]
@@ -161,12 +189,15 @@ class AgentNodes:
                 tasks.append(tool_instance.ainvoke(tool_args))
             else:
                 logger.warning(f"Tool {tool_name} not found")
+
                 async def error_coro(t_name=tool_name):
                     return f"Error: Tool '{t_name}' not found. Available tools: {list(self.tools_by_name.keys())}"
+
                 tasks.append(error_coro())
 
         if tasks:
             import asyncio
+
             execution_results = await asyncio.gather(*tasks, return_exceptions=True)
 
             for i, result in enumerate(execution_results):
@@ -176,12 +207,11 @@ class AgentNodes:
                     content = f"Exception during tool execution: {str(result)}"
                 else:
                     content = str(result)
-                
-                results.append(ToolMessage(
-                    content=content,
-                    tool_call_id=tool_call["id"]
-                ))
-        
+
+                results.append(
+                    ToolMessage(content=content, tool_call_id=tool_call["id"])
+                )
+
         return {"messages": results}
 
     def should_continue(self, state: AgentState):

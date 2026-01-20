@@ -21,7 +21,7 @@ class Settings(BaseSettings):
         description="Requests per second for LLM rate limiting"
     )
     llm_rate_limit_bucket_size: int = Field(
-        default=10, # Allow bursting up to 10 requests
+        default=10, 
         validation_alias="LLM_RATE_LIMIT_BUCKET_SIZE"
     )
     
@@ -49,7 +49,11 @@ class Settings(BaseSettings):
     api_version: str = Field(default="0.1.0", validation_alias="API_VERSION")
     
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
-    github_token: Optional[str] = Field(default=None, validation_alias="GITHUB_TOKEN")
+    github_api_key: Optional[str] = Field(default=None, validation_alias="GITHUB_API_KEY")
+    github_base_url: str = Field(
+        default="https://models.inference.ai.azure.com", 
+        validation_alias="GITHUB_BASE_URL"
+    )
     
     class Config:
         env_file = ".env"

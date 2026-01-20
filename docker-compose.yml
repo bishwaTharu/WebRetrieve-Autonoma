@@ -1,0 +1,12 @@
+services:
+  agent-api:
+    build: .
+    container_name: webretrieve-autonoma
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Mount the code for development (optional, remove for prod)
+      - ./WebRetrieve_Autonoma:/app/WebRetrieve_Autonoma
+    restart: unless-stopped
