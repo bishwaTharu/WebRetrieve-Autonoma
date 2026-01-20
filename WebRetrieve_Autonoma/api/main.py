@@ -68,15 +68,13 @@ async def get_models():
        
     {"id": "llama-3.1-8b-instant", "name": "Llama 3.1 8B Instant", "provider": "Groq"},
     {"id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B Versatile", "provider": "Groq"},
-    {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "name": "Llama 4 Maverick 17B", "provider": "Groq"},
-    {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "name": "Llama 4 Scout 17B", "provider": "Groq"},
     {"id": "moonshotai/kimi-k2-instruct", "name": "Kimi K2 Instruct", "provider": "Groq"},
     {"id": "openai/gpt-oss-120b", "name": "GPT-OSS 120B", "provider": "Groq"},
     {"id": "openai/gpt-oss-20b", "name": "GPT-OSS 20B", "provider": "Groq"},
     {"id": "openai/gpt-oss-safeguard-20b", "name": "GPT-OSS Safeguard 20B", "provider": "Groq"},
     {"id": "qwen/qwen3-32b", "name": "Qwen 3 32B", "provider": "Groq"},
-    {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B", "provider": "Groq"}
-
+    {"id": "gpt-4o", "name": "GPT-4o", "provider": "GitHub"},
+    {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "provider": "GitHub"}
     ] 
     return {"models": models}
 
