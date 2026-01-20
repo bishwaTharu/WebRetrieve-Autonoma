@@ -15,7 +15,7 @@ COPY . .
 RUN uv sync
 
 RUN uv run crawl4ai-setup
-EXPOSE 7860
+EXPOSE 8000
 
 # Start FastAPI
 CMD ["uv", "run", "uvicorn", "WebRetrieve_Autonoma.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
