@@ -1,30 +1,18 @@
-FROM python:3.11-slim-bookworm
+# 1. Use the official all-in-one image (includes Playwright, browsers, and system deps)
+FROM unclecode/crawl4ai:all
 
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir --upgrade pip uv
+USER root
+RUN pip install --no-cache-dir --upgrade uv
 
 WORKDIR /app
-
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-cache
-
-RUN uv run playwright install-deps chromium
-RUN uv run playwright install chromium
-
 COPY . .
-
 RUN uv run crawl4ai-doctor
-
 EXPOSE 8000
-
-
 CMD ["uv", "run", "uvicorn", "WebRetrieve_Autonoma.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
