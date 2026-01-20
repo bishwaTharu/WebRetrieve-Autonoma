@@ -13,8 +13,6 @@ WORKDIR /app
 COPY . .
 
 RUN uv sync
-RUN uv run playwright install-deps
-RUN uv run playwright install chromium
 RUN uv run crawl4ai-setup
 EXPOSE 8000
 
