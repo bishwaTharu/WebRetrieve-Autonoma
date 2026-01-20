@@ -1,5 +1,9 @@
 FROM python:3.11-slim-bookworm
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
@@ -9,14 +13,18 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --no-cache-dir --upgrade pip uv
 
 WORKDIR /app
+
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-cache
 
-COPY . .
-# RUN uv run crawl4ai-setup
-RUN uv run playwright install-deps
+RUN uv run playwright install-deps chromium
 RUN uv run playwright install chromium
+
+COPY . .
+
 RUN uv run crawl4ai-doctor
 
 EXPOSE 8000
+
+
 CMD ["uv", "run", "uvicorn", "WebRetrieve_Autonoma.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
