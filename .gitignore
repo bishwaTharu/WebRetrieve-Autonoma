@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 .env
-frontend
+frontend/node_modules
+frontend/dist
+frontend/.env
 huggingface.txt
 vector_store
+frontend

@@ -1,4 +1,5 @@
 import logging
+from typing import Optional, Tuple
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from langchain.chat_models import init_chat_model
 from WebRetrieve_Autonoma.utils.state import AgentState
@@ -8,6 +9,35 @@ from langchain_core.runnables import RunnableConfig
 
 
 logger = logging.getLogger(__name__)
+
+
+def _split_provider_model(model_name: str) -> Tuple[Optional[str], str]:
+    if not model_name:
+        return None, model_name
+
+    provider_prefixes = {"groq", "github", "openrouter"}
+    if "/" in model_name:
+        prefix, rest = model_name.split("/", 1)
+        if prefix.lower() in provider_prefixes and rest:
+            return prefix.lower(), rest
+
+    return None, model_name
+
+
+def _resolve_backend(model_name: str) -> Tuple[str, str]:
+    provider_prefix, raw_model = _split_provider_model(model_name)
+
+    if provider_prefix in {"groq", "github", "openrouter"}:
+        return provider_prefix, raw_model
+
+    if raw_model and raw_model.endswith(":free"):
+        return "openrouter", raw_model
+
+    github_models = {"gpt-4o", "gpt-4o-mini"}
+    if raw_model in github_models:
+        return "github", raw_model
+
+    return "groq", raw_model
 
 
 class AgentNodes:
@@ -42,30 +72,34 @@ class AgentNodes:
 
         try:
             model_name = model_name or settings.llm_model_name
-            provider = "openai" if "gpt" in model_name.lower() else "groq"
+            backend, resolved_model = _resolve_backend(model_name)
 
             logger.info(
-                f"Initializing LLM with model: {model_name} | Provider: {provider}"
+                f"Initializing LLM with model: {resolved_model} | Provider: {backend}"
             )
 
+            model_provider = "groq" if backend == "groq" else "openai"
             init_kwargs = {
-                "model": model_name,
-                "model_provider": provider,
+                "model": resolved_model,
+                "model_provider": model_provider,
                 "temperature": settings.llm_temperature,
             }
 
-            if provider == "groq":
+            if backend == "groq":
                 init_kwargs["api_key"] = settings.groq_api_key
-            elif provider == "openai":
+            elif backend == "github":
                 init_kwargs["api_key"] = settings.github_api_key
                 init_kwargs["base_url"] = settings.github_base_url
+            elif backend == "openrouter":
+                init_kwargs["api_key"] = settings.openrouter_api_key
+                init_kwargs["base_url"] = settings.openrouter_base_url
 
             self.llm = init_chat_model(**init_kwargs)
 
             self.fast_llm = self.llm
             self.reasoning_llm = self.llm
 
-            logger.info(f"Initialized LLMs for nodes using provider: {provider}")
+            logger.info(f"Initialized LLMs for nodes using provider: {backend}")
         except Exception as e:
             logger.exception(f"Failed to initialize LLM for model {model_name}")
             raise
@@ -81,10 +115,10 @@ class AgentNodes:
             logger.info(f"Frontend requested model: {model_name}")
 
         selected_model_name = model_name or settings.llm_model_name
-        provider = "openai" if "gpt" in selected_model_name.lower() else "groq"
+        backend, resolved_model = _resolve_backend(selected_model_name)
 
         logger.info(
-            f"Resolved Provider: {provider} | Selected Model: {selected_model_name}"
+            f"Resolved Provider: {backend} | Selected Model: {resolved_model}"
         )
 
         try:
@@ -92,17 +126,21 @@ class AgentNodes:
             await self.rate_limiter.acquire()
             logger.info("Token acquired. Proceeding with LLM call.")
 
+            model_provider = "groq" if backend == "groq" else "openai"
             init_kwargs = {
-                "model": selected_model_name,
-                "model_provider": provider,
+                "model": resolved_model,
+                "model_provider": model_provider,
                 "temperature": settings.llm_temperature,
             }
 
-            if provider == "groq":
+            if backend == "groq":
                 init_kwargs["api_key"] = settings.groq_api_key
-            elif provider == "openai":
+            elif backend == "github":
                 init_kwargs["api_key"] = settings.github_api_key
                 init_kwargs["base_url"] = settings.github_base_url
+            elif backend == "openrouter":
+                init_kwargs["api_key"] = settings.openrouter_api_key
+                init_kwargs["base_url"] = settings.openrouter_base_url
 
             current_llm = init_chat_model(**init_kwargs)
 
@@ -164,11 +202,35 @@ class AgentNodes:
 
         except Exception as e:
             logger.exception(f"Error in LLM Call for model {selected_model_name}")
+            error_text = str(e)
+            if (
+                backend == "openrouter"
+                and (
+                    "No endpoints found matching your data policy" in error_text
+                    or "Free model publication" in error_text
+                )
+            ):
+                return {
+                    "messages": [
+                        AIMessage(
+                            content=(
+                                "OpenRouter blocked this request due to your privacy/data policy settings for free models. "
+                                "Enable the required setting in your OpenRouter account, then retry.\n\n"
+                                "Fix:\n"
+                                "- Open https://openrouter.ai/settings/privacy\n"
+                                "- Enable the option that allows free model access / publication under your data policy\n"
+                                "- Retry the request\n\n"
+                                "(OpenRouter returned: 'No endpoints found matching your data policy (Free model publication)')"
+                            )
+                        )
+                    ]
+                }
+
             # Return a fallback message so the agent doesn't just die silently
             return {
                 "messages": [
                     AIMessage(
-                        content=f"An error occurred while generating the response: {str(e)}"
+                        content=f"An error occurred while generating the response: {error_text}"
                     )
                 ]
             }

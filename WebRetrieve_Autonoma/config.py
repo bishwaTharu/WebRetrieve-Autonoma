@@ -54,6 +54,13 @@ class Settings(BaseSettings):
         default="https://models.inference.ai.azure.com", 
         validation_alias="GITHUB_BASE_URL"
     )
+    openrouter_api_key: Optional[str] = Field(
+        default=None, validation_alias="OPENROUTER_API_KEY"
+    )
+    openrouter_base_url: str = Field(
+        default="https://openrouter.ai/api/v1",
+        validation_alias="OPENROUTER_BASE_URL",
+    )
     
     class Config:
         env_file = ".env"

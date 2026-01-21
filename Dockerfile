@@ -1,24 +1,16 @@
-FROM python:3.11-slim-bookworm
+FROM unclecode/crawl4ai:latest
 
-RUN apt-get update && apt-get install -y \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-# Install uv via pip to avoid ghcr.io credential issues
-RUN pip install uv
-
+ENV PYTHONUNBUFFERED=1
+ENV HOME=/app
+ENV UV_NO_VENV=1
+ENV PLAYWRIGHT_BROWSERS_PATH=/tmp/ms-playwright  
 WORKDIR /app
-
-COPY pyproject.toml uv.lock ./
-
-RUN uv sync --no-install-project
-
-RUN uv run crawl4ai-setup
-
-COPY . .
-
-# Install the project itself now that the code is present
-RUN uv sync
-
+COPY pyproject.toml .
+COPY WebRetrieve_Autonoma ./WebRetrieve_Autonoma
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m pip install --no-cache-dir uv build setuptools wheel \
+    && python -m pip install --no-cache-dir -e .
+RUN python -m uv sync --no-cache
+RUN python -m playwright install chromium
 EXPOSE 8000
-
-CMD ["uv", "run", "uvicorn", "WebRetrieve_Autonoma.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "WebRetrieve_Autonoma.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
