@@ -80,6 +80,8 @@ async def get_models():
         import httpx
 
         headers = {}
+        # Only add auth header if API key is available
+        # this is a test
         if settings.openrouter_api_key:
             headers["Authorization"] = f"Bearer {settings.openrouter_api_key}"
 
@@ -87,7 +89,6 @@ async def get_models():
             resp = await client.get(f"{settings.openrouter_base_url}/models", headers=headers)
             resp.raise_for_status()
             payload = resp.json()
-
         data = payload.get("data") if isinstance(payload, dict) else None
         if isinstance(data, list):
             openrouter_free = []
@@ -102,7 +103,8 @@ async def get_models():
 
             openrouter_free.sort(key=lambda x: x["name"])
             models.extend(openrouter_free)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to fetch OpenRouter models: {e}")
         pass
 
     return {"models": models}
