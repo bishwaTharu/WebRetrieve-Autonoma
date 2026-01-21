@@ -68,7 +68,6 @@ async def get_models():
         import json
         import os
         
-        # Read models from JSON file
         models_file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models.json")
         
         if os.path.exists(models_file_path):
@@ -77,7 +76,6 @@ async def get_models():
                 return models_data
         else:
             logger.warning(f"Models file not found at {models_file_path}")
-            # Fallback to basic models if file doesn't exist
             models = [
                 {"id": "groq/llama-3.1-8b-instant", "name": "Llama 3.1 8B Instant", "provider": "Groq"},
                 {"id": "github/gpt-4o", "name": "GPT-4o", "provider": "GitHub"},
