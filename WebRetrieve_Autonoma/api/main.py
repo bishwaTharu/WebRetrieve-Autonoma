@@ -65,17 +65,46 @@ async def get_models():
     Get list of supported models from Groq and local Ollama.
     """
     models = [
-       
-    {"id": "llama-3.1-8b-instant", "name": "Llama 3.1 8B Instant", "provider": "Groq"},
-    {"id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B Versatile", "provider": "Groq"},
-    {"id": "moonshotai/kimi-k2-instruct", "name": "Kimi K2 Instruct", "provider": "Groq"},
-    {"id": "openai/gpt-oss-120b", "name": "GPT-OSS 120B", "provider": "Groq"},
-    {"id": "openai/gpt-oss-20b", "name": "GPT-OSS 20B", "provider": "Groq"},
-    {"id": "openai/gpt-oss-safeguard-20b", "name": "GPT-OSS Safeguard 20B", "provider": "Groq"},
-    {"id": "qwen/qwen3-32b", "name": "Qwen 3 32B", "provider": "Groq"},
-    {"id": "gpt-4o", "name": "GPT-4o", "provider": "GitHub"},
-    {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "provider": "GitHub"}
-    ] 
+        {"id": "groq/llama-3.1-8b-instant", "name": "Llama 3.1 8B Instant", "provider": "Groq"},
+        {"id": "groq/llama-3.3-70b-versatile", "name": "Llama 3.3 70B Versatile", "provider": "Groq"},
+        {"id": "groq/moonshotai/kimi-k2-instruct", "name": "Kimi K2 Instruct", "provider": "Groq"},
+        {"id": "groq/openai/gpt-oss-120b", "name": "GPT-OSS 120B", "provider": "Groq"},
+        {"id": "groq/openai/gpt-oss-20b", "name": "GPT-OSS 20B", "provider": "Groq"},
+        {"id": "groq/openai/gpt-oss-safeguard-20b", "name": "GPT-OSS Safeguard 20B", "provider": "Groq"},
+        {"id": "groq/qwen/qwen3-32b", "name": "Qwen 3 32B", "provider": "Groq"},
+        {"id": "github/gpt-4o", "name": "GPT-4o", "provider": "GitHub"},
+        {"id": "github/gpt-4o-mini", "name": "GPT-4o Mini", "provider": "GitHub"},
+    ]
+
+    try:
+        import httpx
+
+        headers = {}
+        if settings.openrouter_api_key:
+            headers["Authorization"] = f"Bearer {settings.openrouter_api_key}"
+
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{settings.openrouter_base_url}/models", headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
+
+        data = payload.get("data") if isinstance(payload, dict) else None
+        if isinstance(data, list):
+            openrouter_free = []
+            for m in data:
+                mid = m.get("id") if isinstance(m, dict) else None
+                if not mid or ":free" not in str(mid):
+                    continue
+                mname = m.get("name") or str(mid)
+                openrouter_free.append(
+                    {"id": f"openrouter/{mid}", "name": mname, "provider": "OpenRouter"}
+                )
+
+            openrouter_free.sort(key=lambda x: x["name"])
+            models.extend(openrouter_free)
+    except Exception:
+        pass
+
     return {"models": models}
 
 
