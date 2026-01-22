@@ -135,71 +135,57 @@ async def stream_query(request: StreamingQueryRequest):
                 "recursion_limit": 30 # Increased to allow for deep dive research
             }
 
-            async for output in graph.astream(inputs, config=final_config, stream_mode="updates"):
-                for node_name, state_update in output.items():
-                    logger.info(f"Node {node_name} executed")
+            # Initial signal the stream has started
+            init_data = json.dumps({"event_type": "status", "message": "Thinking...", "progress_percent": 10})
+            yield f"event: progress\ndata: {init_data}\n\n"
 
-                    if node_name == "tool_node":
-                        node_progress = json.dumps(
-                            {
-                                "event_type": "tool_start",
-                                "message": "Executing tools...",
-                                "progress_percent": 60,
-                            }
-                        )
-                        yield f"event: progress\ndata: {node_progress}\n\n"
-                    elif node_name == "llm_call":
-                        node_progress = json.dumps(
-                            {
-                                "event_type": "status",
-                                "message": "LLM thinking...",
-                                "progress_percent": 30,
-                            }
-                        )
-                        yield f"event: progress\ndata: {node_progress}\n\n"
-                    
-                    if "generation" in state_update:
-                        # We still keep the check for final answer extraction if needed by other components,
-                        # but message sending is handled by the "messages" block below.
-                        pass
+            async for event in graph.astream_events(inputs, config=final_config, version="v2"):
+                kind = event["event"]
+                
+                if kind == "on_chat_model_stream":
+                    chunk = event["data"]["chunk"]
+                    if hasattr(chunk, "content") and chunk.content:
+                        token_data = json.dumps({
+                            "event_type": "token",
+                            "message": str(chunk.content),
+                            "role": "ai"
+                        })
+                        yield f"event: token\ndata: {token_data}\n\n"
+                
+                elif kind == "on_tool_start":
+                    tool_name = event["name"]
+                    tool_data = json.dumps({
+                        "event_type": "tool_start",
+                        "message": f"Using {tool_name}...",
+                        "tool_name": tool_name,
+                        "progress_percent": 60,
+                    })
+                    yield f"event: progress\ndata: {tool_data}\n\n"
+                
+                elif kind == "on_tool_end":
+                    tool_name = event["name"]
+                    tool_data = json.dumps({
+                        "event_type": "tool_complete",
+                        "message": f"Finished using {tool_name}",
+                        "tool_name": tool_name,
+                        "progress_percent": 80,
+                    })
+                    yield f"event: progress\ndata: {tool_data}\n\n"
+                
+                elif kind == "on_chat_model_end":
+                    # Final message from a model call (e.g. tool calls or final answer)
+                    msg = event["data"]["output"]
+                    # Be inclusive of 'ai' or 'assistant' types
+                    if hasattr(msg, "type") and msg.type in ["ai", "assistant"]:
+                        message_data = json.dumps({
+                            "role": "ai",
+                            "content": msg.content,
+                            "model": request.model,
+                            "tool_calls": getattr(msg, "tool_calls", None),
+                        })
+                        yield f"event: message\ndata: {message_data}\n\n"
 
-                    if "messages" in state_update:
-                        for msg in state_update["messages"]:
-                            msg_content = (
-                                str(msg.content)
-                                if hasattr(msg, "content")
-                                else str(msg)
-                            )
-                            msg_type = getattr(msg, "type", "unknown")
-
-                            # Send tool call events
-                            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                                for tool_call in msg.tool_calls:
-                                    tool_name = tool_call.get("name", "unknown")
-                                    tool_event = json.dumps(
-                                        {
-                                            "event_type": "tool_start",
-                                            "message": f"Using {tool_name}...",
-                                            "tool_name": tool_name,
-                                            "progress_percent": progress,
-                                        }
-                                    )
-                                    yield f"event: progress\ndata: {tool_event}\n\n"
-
-                            if msg_type in ["ai", "human", "tool"]:
-                                message_data = json.dumps(
-                                    {
-                                        "role": msg_type,
-                                        "content": msg_content,
-                                        "tool_calls": (
-                                            msg.tool_calls
-                                            if hasattr(msg, "tool_calls")
-                                            else None
-                                        ),
-                                    }
-                                )
-                                yield f"event: message\ndata: {message_data}\n\n"
-
+            # Final completion signal
             complete_data = json.dumps(
                 {
                     "event_type": "complete",

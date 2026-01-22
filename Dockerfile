@@ -6,6 +6,7 @@ ENV UV_NO_VENV=1
 ENV PLAYWRIGHT_BROWSERS_PATH=/tmp/ms-playwright  
 WORKDIR /app
 COPY pyproject.toml .
+COPY models.json .
 COPY WebRetrieve_Autonoma ./WebRetrieve_Autonoma
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir uv build setuptools wheel \

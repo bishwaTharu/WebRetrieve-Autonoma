@@ -193,7 +193,8 @@ class AgentNodes:
             )
 
             llm_with_tools = current_llm.bind_tools(self.tools)
-            response = await llm_with_tools.ainvoke([sys_msg] + processed_messages)
+            # CRITICAL: Pass config to ensure events are tracked by astream_events
+            response = await llm_with_tools.ainvoke([sys_msg] + processed_messages, config=config)
 
             logger.info(f"LLM Response Content: {response.content[:200]}...")
             logger.info(f"LLM Response Tool Calls: {response.tool_calls}")
@@ -235,7 +236,7 @@ class AgentNodes:
                 ]
             }
 
-    async def tool_node(self, state: AgentState):
+    async def tool_node(self, state: AgentState, config: RunnableConfig = None):
         logger.info("Tool Node: Executing tools")
         last_message = state["messages"][-1]
         results = []
@@ -248,7 +249,8 @@ class AgentNodes:
             if tool_name in self.tools_by_name:
                 logger.info(f"Scheduling tool: {tool_name}")
                 tool_instance = self.tools_by_name[tool_name]
-                tasks.append(tool_instance.ainvoke(tool_args))
+                # Pass config to tool calls for tracing
+                tasks.append(tool_instance.ainvoke(tool_args, config=config))
             else:
                 logger.warning(f"Tool {tool_name} not found")
 
