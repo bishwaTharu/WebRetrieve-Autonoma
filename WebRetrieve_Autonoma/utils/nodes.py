@@ -14,12 +14,27 @@ import json
 logger = logging.getLogger(__name__)
 
 
-def _clean_response_content(content: str) -> str:
+def _clean_response_content(content) -> str:
     """
     Clean and filter response content to prevent validation data and internal content from being shown.
     """
     if not content:
         return content
+    
+    # Handle case where content is a list of dictionaries
+    if isinstance(content, list):
+        # Extract text from the list of dictionaries
+        text_parts = []
+        for item in content:
+            if isinstance(item, dict) and 'text' in item:
+                text_parts.append(item['text'])
+            elif isinstance(item, str):
+                text_parts.append(item)
+        content = ''.join(text_parts)
+    
+    # Ensure content is a string
+    if not isinstance(content, str):
+        content = str(content)
     
     # Remove validation arrays with type, text, extras, index fields
     content = re.sub(r'\[.*?\'type\'.*?\'text\'.*?\'extras\'.*?\'index\'.*?\]', '', content, flags=re.DOTALL)
