@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.scripts]
-app = "app:app"
+app = "WebRetrieve_Autonoma.api.main:app"
 
 [tool.vercel.scripts]
 build = "python -m pip install -e ."
