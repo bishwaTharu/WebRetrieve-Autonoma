@@ -17,18 +17,22 @@ logger = logging.getLogger(__name__)
 def _clean_response_content(content) -> str:
     """
     Clean and filter response content to prevent validation data and internal content from being shown.
+    Specifically handles Gemini's response format with 'text' and 'extras' fields.
     """
     if not content:
         return content
     
-    # Handle case where content is a list of dictionaries
+    # Handle case where content is a list of dictionaries (Gemini format)
     if isinstance(content, list):
-        # Extract text from the list of dictionaries
         text_parts = []
         for item in content:
-            if isinstance(item, dict) and 'text' in item:
-                text_parts.append(item['text'])
+            if isinstance(item, dict):
+                # Only extract the 'text' field, completely ignore 'extras', 'signature', 'index', etc.
+                if 'text' in item:
+                    text_parts.append(item['text'])
+                # Skip any items that don't have a 'text' field
             elif isinstance(item, str):
+                # If it's a plain string, include it
                 text_parts.append(item)
         content = ''.join(text_parts)
     
@@ -36,32 +40,42 @@ def _clean_response_content(content) -> str:
     if not isinstance(content, str):
         content = str(content)
     
-    # Remove validation arrays with type, text, extras, index fields
-    content = re.sub(r'\[.*?\'type\'.*?\'text\'.*?\'extras\'.*?\'index\'.*?\]', '', content, flags=re.DOTALL)
+    # Remove any remaining validation arrays with type, text, extras, index fields
+    # This handles cases where the list structure might be stringified
+    content = re.sub(r'\[.*?["\']type["\'].*?["\']text["\'].*?["\']extras["\'].*?["\']index["\'].*?\]', '', content, flags=re.DOTALL)
     
-    # Remove signature patterns
-    content = re.sub(r'\'signature\':\s*\'[^\']*\'', '', content)
+    # Remove signature patterns (both single and double quotes)
+    content = re.sub(r'["\']signature["\']:\s*["\'][^"\']*["\']', '', content)
     
     # Remove arrays that look like validation data
-    content = re.sub(r'\[\s*{[^}]*\'type\':\s*\'text\'[^}]*}\s*\]', '', content, flags=re.DOTALL)
+    content = re.sub(r'\[\s*\{[^}]*["\']type["\']:\s*["\']text["\'][^}]*\}\s*\]', '', content, flags=re.DOTALL)
     
-    # Remove any remaining JSON-like structures that might be internal data
-    content = re.sub(r'{[^}]*\'extras\':[^}]*}', '', content)
+    # Remove any remaining JSON-like structures with 'extras' field
+    content = re.sub(r'\{[^}]*["\']extras["\']:[^}]*\}', '', content)
+    
+    # Remove any remaining 'index' fields
+    content = re.sub(r'["\']index["\']:\s*\d+', '', content)
     
     # Clean up extra whitespace and newlines
     content = re.sub(r'\n\s*\n', '\n\n', content)
     content = content.strip()
     
-    # If content starts with problematic patterns, try to extract the meaningful part
+    # Line-by-line filtering for any remaining problematic patterns
     lines = content.split('\n')
     cleaned_lines = []
     skip_line = False
     
     for line in lines:
-        if any(pattern in line for pattern in ["'type':", "'extras':", "'signature':", "'index':"]):
+        # Check for both single and double quoted patterns
+        if any(pattern in line for pattern in [
+            "'type':", '"type":',
+            "'extras':", '"extras":',
+            "'signature':", '"signature":',
+            "'index':", '"index":'
+        ]):
             skip_line = True
             continue
-        if skip_line and line.strip() == ']':
+        if skip_line and line.strip() in [']', '},', '}']:
             skip_line = False
             continue
         if not skip_line:
