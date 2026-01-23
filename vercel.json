@@ -14,7 +14,6 @@
     ],
     "env": {
         "PYTHONUNBUFFERED": "1",
-        "HOME": "/app",
         "PLAYWRIGHT_BROWSERS_PATH": "/tmp/ms-playwright"
     }
 }
