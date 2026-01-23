@@ -1,0 +1,65 @@
+# Ignore backup files
+*_backup.py
+*_old.py
+*_new.py
+*_final.py
+*_clean.py
+*_delete.py
+
+# Ignore cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Ignore development files
+.git/
+.gitignore
+README.md
+Dockerfile
+docker-compose.yml
+*.md
+docs/
+.vscode/
+.idea/
+
+# Ignore lock files (use pyproject.toml instead)
+uv.lock
+poetry.lock
+requirements*.txt
+
+# Ignore test files
+tests/
+test_*.py
+*_test.py
+
+# Ignore large data files
+*.csv
+*.json
+*.parquet
+*.pkl
+*.pickle
+data/
+datasets/
+
+# Ignore model files
+models/
+*.bin
+*.safetensors
+*.h5
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
