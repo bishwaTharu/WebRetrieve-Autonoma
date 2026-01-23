@@ -1,0 +1,20 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "WebRetrieve_Autonoma/api/main.py",
+            "use": "@vercel/python"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/(.*)",
+            "dest": "WebRetrieve_Autonoma/api/main.py"
+        }
+    ],
+    "env": {
+        "PYTHONUNBUFFERED": "1",
+        "HOME": "/app",
+        "PLAYWRIGHT_BROWSERS_PATH": "/tmp/ms-playwright"
+    }
+}

@@ -32,7 +32,7 @@ dependencies = [
 app = "WebRetrieve_Autonoma.api.main:app"
 
 [tool.vercel.scripts]
-build = "python -m pip install --no-cache-dir --upgrade pip && python -m pip install --no-cache-dir uv build setuptools wheel && python -m pip install --no-cache-dir -e . && python -m uv sync --no-cache && python -m playwright install chromium"
+build = "python -m pip install --no-cache-dir --upgrade pip && python -m pip install --no-cache-dir build setuptools wheel && python -m pip install --no-cache-dir -e . && python -m playwright install chromium"
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
