@@ -15,5 +15,10 @@
     "env": {
         "PYTHONUNBUFFERED": "1",
         "PLAYWRIGHT_BROWSERS_PATH": "/tmp/ms-playwright"
+    },
+    "functions": {
+        "WebRetrieve_Autonoma/api/main.py": {
+            "maxDuration": 30
+        }
     }
 }
