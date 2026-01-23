@@ -4,7 +4,6 @@ from langchain_core.documents import Document
 from langchain_community.vectorstores import SKLearnVectorStore
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import BM25Retriever
-from langchain_classic.retrievers import EnsembleRetriever
 from WebRetrieve_Autonoma.config import settings
 from WebRetrieve_Autonoma.utils.gemini_embeddings import GeminiEmbeddings
 from WebRetrieve_Autonoma.utils.google_search_tool import GoogleSearchTool
