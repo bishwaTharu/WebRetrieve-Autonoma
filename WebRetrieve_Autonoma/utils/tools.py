@@ -1,13 +1,13 @@
 import logging
 from langchain_core.tools import tool
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SKLearnVectorStore
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig, CacheMode, BrowserConfig
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
 from WebRetrieve_Autonoma.config import settings
+from WebRetrieve_Autonoma.utils.gemini_embeddings import GeminiEmbeddings
 import urllib.parse
 
 
@@ -23,12 +23,9 @@ class AgentTools:
 
         try:
             logger.info(
-                f"Initializing HuggingFace embeddings: {settings.embedding_model_name}"
+                f"Initializing Gemini embeddings: {settings.embedding_model_name}"
             )
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name=settings.embedding_model_name,
-                model_kwargs={"device": settings.embedding_device},
-            )
+            self.embeddings = GeminiEmbeddings()
 
             self.vector_store = SKLearnVectorStore(embedding=self.embeddings)
             self.documents = []
