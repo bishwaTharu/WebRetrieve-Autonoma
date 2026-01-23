@@ -29,7 +29,7 @@ dependencies = [
 ]
 
 [project.scripts]
-app = "api:app"
+app = "app:app"
 
 [tool.vercel.scripts]
 build = "python -m pip install -e ."
