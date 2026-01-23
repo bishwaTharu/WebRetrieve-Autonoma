@@ -340,61 +340,41 @@ class AgentTools:
         logger.info(f"Starting web crawl for URL: {url}")
 
         try:
-            # Use Google Search tool to crawl the website
-            result = self.google_search.crawl_website(url)
+            async with AsyncWebCrawler() as crawler:
+                result = await crawler.arun(url=url, config=self.crawler_config)
 
-            if not result or not result.success:
-                error_msg = getattr(result, "error_message", "Unknown error")
-                logger.error(f"Failed to crawl {url}: {error_msg}")
-                return f"Failed to crawl {url}. Error: {error_msg}"
+                if not result or not result.success:
+                    error_msg = getattr(result, "error_message", "Unknown error")
+                    logger.error(f"Failed to crawl {url}: {error_msg}")
+                    return f"Failed to crawl {url}. Error: {error_msg}"
 
-            texts = self.text_splitter.split_text(result.markdown)
-            logger.info(f"Split content into {len(texts)} chunks for {url}")
+                texts = self.text_splitter.split_text(result.markdown)
+                logger.info(f"Split content into {len(texts)} chunks for {url}")
 
-            docs = []
-            for i, text in enumerate(texts):
-                contextual_header = f"[Source: {url} | Title: {getattr(result, 'metadata', {}).get('title', 'No Title')}]\n"
-                contextual_content = contextual_header + text
+                docs = []
+                for i, text in enumerate(texts):
+                    contextual_header = f"[Source: {url} | Title: {getattr(result, 'metadata', {}).get('title', 'No Title')}]\n"
+                    contextual_content = contextual_header + text
 
-                docs.append(
-                    Document(
-                        page_content=contextual_content,
-                        metadata={
-                            "source": url,
-                            "title": getattr(result, "metadata", {}).get(
-                                "title", "No Title"
-                            ),
-                            "chunk": i,
-                        },
+                    docs.append(
+                        Document(
+                            page_content=contextual_content,
+                            metadata={
+                                "source": url,
+                                "title": getattr(result, "metadata", {}).get(
+                                    "title", "No Title"
+                                ),
+                                "chunk": i,
+                            },
+                        )
                     )
-                )
 
-            self.vector_store.add_documents(docs)
-            self.documents.extend(docs)
-            logger.info(f"Successfully indexed {len(docs)} chunks from {url}")
+                self.vector_store.add_documents(docs)
+                self.documents.extend(docs)
+                logger.info(f"Successfully indexed {len(docs)} chunks from {url}")
 
-            links = result.links.get("internal", [])
-            links_summary = "\n".join(
-                [
-                    f"- {l.get('text', 'No text')}: {l.get('href', 'No href')}"
-                    for l in links[:15]
-                ]
-            )
-
-            return (
-                f"✓ Successfully crawled and indexed {url}.\n"
-                f"📄 Indexed {len(docs)} content chunks.\n"
-                f"Content snippet: {result.markdown[:300]}...\n\n"
-                f"🔗 Found {len(links)} internal links (showing top 15 for deeper research):\n{links_summary if links_summary else 'No internal links found'}"
-            )
-        except Exception as e:
-            logger.exception(f"Error crawling {url}")
-            return f"❌ Error crawling {url}: {str(e)}"
-
-    def _rag_retrieval_logic(self, query: str) -> list[Document]:
-        """
-        Logic for searching the internal knowledge base using Hybrid Retrieval.
-
+                links = result.links.get("internal", [])
+                links_summary = "\n".join(
         Args:
             query: The search query
 
