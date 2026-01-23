@@ -10,7 +10,7 @@ from WebRetrieve_Autonoma.config import settings
 from WebRetrieve_Autonoma.utils.gemini_embeddings import GeminiEmbeddings
 import urllib.parse
 
-
+##
 logger = logging.getLogger(__name__)
 
 
