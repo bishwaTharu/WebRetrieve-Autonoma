@@ -1,0 +1,21 @@
+[build]
+  base = "/"
+  command = "pip install -r requirements.txt"
+  publish = ""
+
+[build.environment]
+  PYTHON_VERSION = "3.9"
+  PYTHONUNBUFFERED = "1"
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/server"
+  status = 200
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[[functions]]
+  name = "server"
+  path = "netlify/functions/server.py"
