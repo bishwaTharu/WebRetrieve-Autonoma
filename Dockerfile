@@ -12,5 +12,6 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir uv build setuptools wheel \
     && python -m pip install --no-cache-dir -e .
 RUN python -m uv sync --no-cache
+RUN python -m playwright install chromium
 EXPOSE 8000
 CMD ["uvicorn", "WebRetrieve_Autonoma.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

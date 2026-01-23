@@ -4,7 +4,7 @@ from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from langchain.chat_models import init_chat_model
 from langchain_google_genai import ChatGoogleGenerativeAI
 from WebRetrieve_Autonoma.utils.state import AgentState
-from WebRetrieve_Autonoma.utils.tools_new import AgentTools
+from WebRetrieve_Autonoma.utils.tools import AgentTools
 from WebRetrieve_Autonoma.config import settings
 from langchain_core.runnables import RunnableConfig
 import re
@@ -239,22 +239,24 @@ class AgentNodes:
                     "- ONLY provide clean, human-readable answers to user questions\n"
                     "- Your response should be natural language only, not structured data\n\n"
                     "STRATEGY:\n"
-                    "1. SEARCH: When given a question, use 'web_search' to find relevant information with Google Search grounding.\n"
-                    "2. ANALYZE: Use 'search_and_analyze' for comprehensive analysis with detailed sources and search queries.\n"
-                    "3. DOCUMENTS: If you have added documents to the knowledge base, use 'search_documents' to find specific information.\n"
-                    "4. SYNTHESIZE: Provide a comprehensive answer using the grounded search results. Citations are automatically included.\n\n"
+                    "1. SEARCH: When given a question without a specific URL, use 'google_search_tool' to find relevant sources.\n"
+                    "2. SELECT: Review the search results and identify the most promising URLs (top 3-5).\n"
+                    "3. CRAWL: Use 'web_crawler_tool' on each promising URL to gather detailed content. Analyze the content and internal links.\n"
+                    "4. DEEP DIVE: If the initial pages don't have the full answer but show promising links (e.g., 'Pricing', 'Docs', 'About'), crawl those links too.\n"
+                    "5. RETRIEVE: Once you have enough data indexed, use 'rag_retrieval_tool' to find precise details across all crawled pages.\n"
+                    "6. SYNTHESIZE: Provide a comprehensive and technical summary. Cite the specific URLs where you found the info.\n\n"
                     "TOKEN MANAGEMENT:\n"
-                    "Tool outputs may be truncated to stay within limits. If you need more detail, use 'search_and_analyze' for comprehensive results.\n\n"
-                    "EXAMPLE USAGE:\n"
+                    "Tool outputs may be truncated to stay within limits. If you need more detail from a specific crawl, use 'rag_retrieval_tool' with specific keywords.\n\n"
+                    "RAG OPTIMIZATION (Agentic Few-Shot):\n"
                     "User: 'What are the deployment options for LangGraph?'\n"
-                    "Thought: I need comprehensive information about LangGraph deployment options.\n"
-                    'Call: search_and_analyze("LangGraph deployment options Docker Kubernetes")\n'
-                    "Observation: [Retrieved comprehensive analysis with sources and search queries]\n"
-                    "Thought: This gives me detailed deployment information with automatic citations.\n"
-                    "Answer: LangGraph supports deployment via Docker containers... [Source: official docs]\n\n"
+                    "Thought: I've already crawled the LangGraph docs, but the initial summary was truncated. I need specific deployment details.\n"
+                    'Call: rag_retrieval_tool("langgraph deployment options docker kubernetes")\n'
+                    "Observation: [Retrieved specific chunks about Docker containers and Kubernetes helm charts]\n"
+                    "Thought: This gives me the specific technicals I was missing. I can now synthesize the full answer.\n"
+                    "Answer: LangGraph supports deployment via Docker containers... [Source: langgraph-docs]\n\n"
                     "User: 'Compare the pricing of Groq and OpenAI.'\n"
-                    "Thought: I need to compare pricing information from both providers.\n"
-                    'Call: web_search("Groq vs OpenAI API pricing comparison 2024")\n'
+                    "Thought: I have crawled both pricing pages. Now I need to extract the exact numbers side-by-side.\n"
+                    'Call: rag_retrieval_tool("Groq vs OpenAI pricing per 1M tokens")\n'
                     "Observation: [Retrieved chunks with pricing tables]\n"
                     "Answer: Groq charges $0.27/1M tokens for Llama 3 70B, while OpenAI... [Source: pricing-pages]\n\n"
                     "SUGGESTED QUESTIONS:\n"
