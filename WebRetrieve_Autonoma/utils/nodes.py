@@ -2,20 +2,70 @@ import logging
 from typing import Optional, Tuple
 from langchain_core.messages import SystemMessage, ToolMessage, AIMessage
 from langchain.chat_models import init_chat_model
+from langchain_google_genai import ChatGoogleGenerativeAI
 from WebRetrieve_Autonoma.utils.state import AgentState
 from WebRetrieve_Autonoma.utils.tools import AgentTools
 from WebRetrieve_Autonoma.config import settings
 from langchain_core.runnables import RunnableConfig
+import re
+import json
 
 
 logger = logging.getLogger(__name__)
+
+
+def _clean_response_content(content: str) -> str:
+    """
+    Clean and filter response content to prevent validation data and internal content from being shown.
+    """
+    if not content:
+        return content
+    
+    # Remove validation arrays with type, text, extras, index fields
+    content = re.sub(r'\[.*?\'type\'.*?\'text\'.*?\'extras\'.*?\'index\'.*?\]', '', content, flags=re.DOTALL)
+    
+    # Remove signature patterns
+    content = re.sub(r'\'signature\':\s*\'[^\']*\'', '', content)
+    
+    # Remove arrays that look like validation data
+    content = re.sub(r'\[\s*{[^}]*\'type\':\s*\'text\'[^}]*}\s*\]', '', content, flags=re.DOTALL)
+    
+    # Remove any remaining JSON-like structures that might be internal data
+    content = re.sub(r'{[^}]*\'extras\':[^}]*}', '', content)
+    
+    # Clean up extra whitespace and newlines
+    content = re.sub(r'\n\s*\n', '\n\n', content)
+    content = content.strip()
+    
+    # If content starts with problematic patterns, try to extract the meaningful part
+    lines = content.split('\n')
+    cleaned_lines = []
+    skip_line = False
+    
+    for line in lines:
+        if any(pattern in line for pattern in ["'type':", "'extras':", "'signature':", "'index':"]):
+            skip_line = True
+            continue
+        if skip_line and line.strip() == ']':
+            skip_line = False
+            continue
+        if not skip_line:
+            cleaned_lines.append(line)
+    
+    cleaned_content = '\n'.join(cleaned_lines).strip()
+    
+    # Ensure we don't return empty content
+    if not cleaned_content or len(cleaned_content) < 10:
+        return "I apologize, but I encountered an issue processing the response. Please try your question again."
+    
+    return cleaned_content
 
 
 def _split_provider_model(model_name: str) -> Tuple[Optional[str], str]:
     if not model_name:
         return None, model_name
 
-    provider_prefixes = {"groq", "github", "openrouter"}
+    provider_prefixes = {"groq", "github", "openrouter", "gemini"}
     if "/" in model_name:
         prefix, rest = model_name.split("/", 1)
         if prefix.lower() in provider_prefixes and rest:
@@ -27,7 +77,7 @@ def _split_provider_model(model_name: str) -> Tuple[Optional[str], str]:
 def _resolve_backend(model_name: str) -> Tuple[str, str]:
     provider_prefix, raw_model = _split_provider_model(model_name)
 
-    if provider_prefix in {"groq", "github", "openrouter"}:
+    if provider_prefix in {"groq", "github", "openrouter", "gemini"}:
         return provider_prefix, raw_model
 
     if raw_model and raw_model.endswith(":free"):
@@ -36,6 +86,10 @@ def _resolve_backend(model_name: str) -> Tuple[str, str]:
     github_models = {"gpt-4o", "gpt-4o-mini"}
     if raw_model in github_models:
         return "github", raw_model
+
+    gemini_models = {"gemini-2.5-flash"}
+    if raw_model in gemini_models:
+        return "gemini", raw_model
 
     return "groq", raw_model
 
@@ -78,23 +132,30 @@ class AgentNodes:
                 f"Initializing LLM with model: {resolved_model} | Provider: {backend}"
             )
 
-            model_provider = "groq" if backend == "groq" else "openai"
-            init_kwargs = {
-                "model": resolved_model,
-                "model_provider": model_provider,
-                "temperature": settings.llm_temperature,
-            }
+            if backend == "gemini":
+                self.llm = ChatGoogleGenerativeAI(
+                    model=resolved_model,
+                    temperature=settings.llm_temperature,
+                    api_key=settings.gemini_api_key
+                )
+            else:
+                model_provider = "groq" if backend == "groq" else "openai"
+                init_kwargs = {
+                    "model": resolved_model,
+                    "model_provider": model_provider,
+                    "temperature": settings.llm_temperature,
+                }
 
-            if backend == "groq":
-                init_kwargs["api_key"] = settings.groq_api_key
-            elif backend == "github":
-                init_kwargs["api_key"] = settings.github_api_key
-                init_kwargs["base_url"] = settings.github_base_url
-            elif backend == "openrouter":
-                init_kwargs["api_key"] = settings.openrouter_api_key
-                init_kwargs["base_url"] = settings.openrouter_base_url
+                if backend == "groq":
+                    init_kwargs["api_key"] = settings.groq_api_key
+                elif backend == "github":
+                    init_kwargs["api_key"] = settings.github_api_key
+                    init_kwargs["base_url"] = settings.github_base_url
+                elif backend == "openrouter":
+                    init_kwargs["api_key"] = settings.openrouter_api_key
+                    init_kwargs["base_url"] = settings.openrouter_base_url
 
-            self.llm = init_chat_model(**init_kwargs)
+                self.llm = init_chat_model(**init_kwargs)
 
             self.fast_llm = self.llm
             self.reasoning_llm = self.llm
@@ -126,23 +187,30 @@ class AgentNodes:
             await self.rate_limiter.acquire()
             logger.info("Token acquired. Proceeding with LLM call.")
 
-            model_provider = "groq" if backend == "groq" else "openai"
-            init_kwargs = {
-                "model": resolved_model,
-                "model_provider": model_provider,
-                "temperature": settings.llm_temperature,
-            }
+            if backend == "gemini":
+                current_llm = ChatGoogleGenerativeAI(
+                    model=resolved_model,
+                    temperature=settings.llm_temperature,
+                    api_key=settings.gemini_api_key
+                )
+            else:
+                model_provider = "groq" if backend == "groq" else "openai"
+                init_kwargs = {
+                    "model": resolved_model,
+                    "model_provider": model_provider,
+                    "temperature": settings.llm_temperature,
+                }
 
-            if backend == "groq":
-                init_kwargs["api_key"] = settings.groq_api_key
-            elif backend == "github":
-                init_kwargs["api_key"] = settings.github_api_key
-                init_kwargs["base_url"] = settings.github_base_url
-            elif backend == "openrouter":
-                init_kwargs["api_key"] = settings.openrouter_api_key
-                init_kwargs["base_url"] = settings.openrouter_base_url
+                if backend == "groq":
+                    init_kwargs["api_key"] = settings.groq_api_key
+                elif backend == "github":
+                    init_kwargs["api_key"] = settings.github_api_key
+                    init_kwargs["base_url"] = settings.github_base_url
+                elif backend == "openrouter":
+                    init_kwargs["api_key"] = settings.openrouter_api_key
+                    init_kwargs["base_url"] = settings.openrouter_base_url
 
-            current_llm = init_chat_model(**init_kwargs)
+                current_llm = init_chat_model(**init_kwargs)
 
             processed_messages = []
             for msg in messages:
@@ -164,6 +232,12 @@ class AgentNodes:
             sys_msg = SystemMessage(
                 content=(
                     "You are a robust WebRetrieve Autonoma. Your mission is to thoroughly research websites and provide technical answers.\n\n"
+                    "CRITICAL OUTPUT RULES:\n"
+                    "- NEVER output validation data, signatures, or internal metadata\n"
+                    "- NEVER show arrays with 'type', 'text', 'extras', 'index' fields\n"
+                    "- NEVER include source code, JSON objects, or technical internals in your main response\n"
+                    "- ONLY provide clean, human-readable answers to user questions\n"
+                    "- Your response should be natural language only, not structured data\n\n"
                     "STRATEGY:\n"
                     "1. SEARCH: When given a question without a specific URL, use 'google_search_tool' to find relevant sources.\n"
                     "2. SELECT: Review the search results and identify the most promising URLs (top 3-5).\n"
@@ -199,7 +273,16 @@ class AgentNodes:
             logger.info(f"LLM Response Content: {response.content[:200]}...")
             logger.info(f"LLM Response Tool Calls: {response.tool_calls}")
 
-            return {"messages": [response]}
+            # Clean the response content to remove validation data and internal content
+            cleaned_content = _clean_response_content(response.content)
+            
+            # Create a new response with cleaned content
+            cleaned_response = AIMessage(
+                content=cleaned_content,
+                tool_calls=response.tool_calls if hasattr(response, 'tool_calls') else None
+            )
+
+            return {"messages": [cleaned_response]}
 
         except Exception as e:
             logger.exception(f"Error in LLM Call for model {selected_model_name}")

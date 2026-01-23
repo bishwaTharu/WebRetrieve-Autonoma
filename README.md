@@ -31,12 +31,13 @@ Create a `.env` file in the project root:
 ```env
 # Required
 GROQ_API_KEY=your_groq_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 
 # Optional - defaults shown
 LLM_MODEL_NAME=llama-3.3-70b-versatile
 LLM_TEMPERATURE=0.0
 LLM_RATE_LIMIT_RPS=0.1
-EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
+EMBEDDING_MODEL_NAME=gemini-embedding-001
 CHUNK_SIZE=4000
 CHUNK_OVERLAP=200
 RAG_TOP_K=5
@@ -153,10 +154,11 @@ All settings can be configured via environment variables or `.env` file:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GROQ_API_KEY` | (required) | Groq API key for LLM access |
+| `GEMINI_API_KEY` | (required) | Gemini API key for embeddings and LLM access |
 | `LLM_MODEL_NAME` | `llama-3.3-70b-versatile` | LLM model to use |
 | `LLM_TEMPERATURE` | `0.0` | LLM temperature for responses |
 | `LLM_RATE_LIMIT_RPS` | `0.1` | Requests per second for LLM |
-| `EMBEDDING_MODEL_NAME` | `sentence-transformers/all-MiniLM-L6-v2` | Embedding model |
+| `EMBEDDING_MODEL_NAME` | `gemini-embedding-001` | Embedding model |
 | `CHUNK_SIZE` | `4000` | Text chunk size for splitting |
 | `CHUNK_OVERLAP` | `200` | Overlap between chunks |
 | `RAG_TOP_K` | `5` | Number of documents to retrieve |

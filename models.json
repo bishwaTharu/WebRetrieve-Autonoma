@@ -46,6 +46,11 @@
             "provider": "GitHub"
         },
         {
+            "id": "gemini/gemini-2.5-flash",
+            "name": "Gemini 2.5 Flash",
+            "provider": "Google"
+        },
+        {
             "id": "openrouter/allenai/molmo-2-8b:free",
             "name": "AllenAI: Molmo2 8B (free)",
             "provider": "OpenRouter"
@@ -53,11 +58,6 @@
         {
             "id": "openrouter/arcee-ai/trinity-mini:free",
             "name": "Arcee AI: Trinity Mini (free)",
-            "provider": "OpenRouter"
-        },
-        {
-            "id": "openrouter/google/gemini-2.0-flash-exp:free",
-            "name": "Google: Gemini 2.0 Flash Experimental (free)",
             "provider": "OpenRouter"
         },
         {

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
     groq_api_key: str = Field(..., validation_alias="GROQ_API_KEY")
+    gemini_api_key: str = Field(..., validation_alias="GEMINI_API_KEY")
     
     llm_provider: str = Field(default="groq", validation_alias="LLM_PROVIDER")
     llm_model_name: str = Field(
@@ -26,7 +27,7 @@ class Settings(BaseSettings):
     )
     
     embedding_model_name: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2",
+        default="gemini-embedding-001",
         validation_alias="EMBEDDING_MODEL_NAME"
     )
     embedding_device: str = Field(default="cpu", validation_alias="EMBEDDING_DEVICE")
@@ -60,6 +61,11 @@ class Settings(BaseSettings):
     openrouter_base_url: str = Field(
         default="https://openrouter.ai/api/v1",
         validation_alias="OPENROUTER_BASE_URL",
+    )
+    
+    gemini_model_name: str = Field(
+        default="gemini-2.5-flash",
+        validation_alias="GEMINI_MODEL_NAME"
     )
     
     class Config:
