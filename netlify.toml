@@ -15,7 +15,3 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
-
-[[functions]]
-  name = "server"
-  path = "netlify/functions/server.py"
